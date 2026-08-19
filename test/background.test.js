@@ -1,0 +1,334 @@
+/**
+ * End-to-end coverage of the service worker: injection, extraction, the
+ * self-healing round trip, normalization, advisory fallback, and the message
+ * router — all with the Chrome APIs and the Anthropic API stubbed out.
+ */
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { makeStorage, installChrome, uninstallChrome, stubFetch, messageResponse } from './helpers.mjs';
+import { MSG, STORAGE_KEYS } from '../src/lib/constants.js';
+import { HEALTHY_PAGE, BROKEN_PAGE } from './fixtures/pages.mjs';
+import { makePage, loadContentScript } from './helpers.mjs';
+
+let background;
+let openPage = null;
+
+/** Wires the real content script (in jsdom) up to the mocked tabs API. */
+function pageBackedTabHandler(html, url) {
+  const page = makePage(html, { url });
+  const script = loadContentScript(page);
+  openPage = page;
+  return async (message) => {
+    if (message.type === 'PING') return { ok: true, host: new URL(url).host };
+    return script.send(message);
+  };
+}
+
+function closePage() {
+  if (openPage) {
+    openPage.restore();
+    openPage = null;
+  }
+}
+
+/** Offscreen stand-in: mirrors what `src/offscreen.js` does with the snippet. */
+async function offscreenSanitize(message) {
+  if (message.type !== MSG.SANITIZE_HTML) return null;
+  const { sanitizeSnippet } = await import('../src/lib/sanitize.js');
+  const { JSDOM } = await import('jsdom');
+  const body = new JSDOM(`<body>${message.payload.html}</body>`).window.document.body;
+  return { ok: true, ...sanitizeSnippet(body, { maxChars: message.payload.maxChars }) };
+}
+
+test.before(async () => {
+  installChrome({ storage: makeStorage() });
+  background = await import('../src/background.js');
+});
+
+test.afterEach(() => {
+  closePage();
+  delete globalThis.fetch;
+});
+
+test('isScrapableUrl allows http(s) pages and blocks browser surfaces', () => {
+  assert.equal(background.isScrapableUrl('https://finance.yahoo.com/quote/AAPL'), true);
+  assert.equal(background.isScrapableUrl('http://localhost:8080/x'), true);
+  assert.equal(background.isScrapableUrl('chrome://extensions'), false);
+  assert.equal(background.isScrapableUrl('chrome-extension://abc/popup.html'), false);
+  assert.equal(background.isScrapableUrl('about:blank'), false);
+  assert.equal(background.isScrapableUrl('https://chromewebstore.google.com/detail/x'), false);
+  assert.equal(background.isScrapableUrl('file:///Users/x/page.html'), false);
+  assert.equal(background.isScrapableUrl('not a url'), false);
+  assert.equal(background.isScrapableUrl(null), false);
+});
+
+test('a restricted tab is refused with a readable message', async () => {
+  installChrome({ storage: makeStorage(), tab: { url: 'chrome://extensions' } });
+  await assert.rejects(() => background.scrapeActiveTab(), /cannot be scraped/);
+});
+
+test('a healthy page scrapes into the documented payload without healing', async () => {
+  const url = 'https://finance.yahoo.com/quote/AAPL';
+  const chrome = installChrome({ storage: makeStorage(), tab: { url }, tabHandler: pageBackedTabHandler(HEALTHY_PAGE, url) });
+
+  const result = await background.scrapeActiveTab();
+  assert.equal(result.usable, true);
+  assert.deepEqual(result.healed, []);
+  assert.deepEqual(result.warnings, []);
+  assert.equal(result.snapshot.ticker, 'AAPL');
+  assert.equal(result.snapshot.current_price, 224.5);
+  assert.equal(result.snapshot.currency, 'USD');
+  assert.equal(result.snapshot.change_percentage, '+1.80%');
+  assert.equal(result.snapshot.volume, 52300000);
+  assert.equal(result.snapshot.news.length, 2);
+  assert.equal(result.snapshot.selectors_used.price_selector, '[data-testid="qsp-price"]');
+  assert.ok(Date.parse(result.snapshot.extracted_at));
+
+  // PING answered, so no redundant injection happened.
+  assert.equal(chrome._calls.executeScript.length, 0);
+
+  const stored = await chrome.storage.local.get(STORAGE_KEYS.SNAPSHOTS);
+  assert.equal(stored[STORAGE_KEYS.SNAPSHOTS].AAPL.current_price, 224.5);
+});
+
+test('the content script is injected when the page does not answer PING', async () => {
+  const url = 'https://finance.yahoo.com/quote/AAPL';
+  const inner = pageBackedTabHandler(HEALTHY_PAGE, url);
+  let pinged = 0;
+  const chrome = installChrome({
+    storage: makeStorage(),
+    tab: { url },
+    tabHandler: async (message) => {
+      if (message.type === 'PING' && pinged++ === 0) return undefined; // no listener yet
+      return inner(message);
+    },
+  });
+  const result = await background.scrapeActiveTab();
+  assert.equal(result.usable, true);
+  assert.equal(chrome._calls.executeScript.length, 1);
+  assert.deepEqual(chrome._calls.executeScript[0].files, ['src/content.js']);
+  assert.equal(chrome._calls.executeScript[0].target.tabId, 7);
+});
+
+test('a renamed layout is healed end to end and the selector is persisted', async () => {
+  const url = 'https://finance.yahoo.com/quote/AAPL';
+  const storage = makeStorage({ [STORAGE_KEYS.SETTINGS]: { apiKey: 'sk-ant-test' } });
+  const chrome = installChrome({
+    storage,
+    tab: { url },
+    tabHandler: pageBackedTabHandler(BROKEN_PAGE, url),
+    offscreenHandler: offscreenSanitize,
+  });
+
+  // The model answers with the selector that actually works on the new layout.
+  const answers = {
+    price: '.qz-8f31ab',
+    change_percentage: '.qz-delta-19c',
+    volume: '.qz-vol-77a',
+    news: '.story h3',
+    ticker: '.hdr-2026 h1',
+  };
+  globalThis.fetch = stubFetch(async (_url, init) => {
+    const body = JSON.parse(init.body);
+    const field = /Metric that failed: (\w+)/.exec(body.messages[0].content)[1];
+    const payload = { selector: answers[field], strategy: 'css', confidence: 0.9, reason: 'matched the value node' };
+    const { json } = messageResponse(payload);
+    return { ok: true, status: 200, async text() { return JSON.stringify(json); } };
+  });
+
+  const result = await background.scrapeActiveTab();
+  assert.equal(result.usable, true, `warnings: ${result.warnings.join(' | ')}`);
+  assert.equal(result.snapshot.current_price, 224.5);
+  assert.equal(result.snapshot.change_percentage, '+1.80%');
+  assert.equal(result.snapshot.volume, 52300000);
+  assert.ok(result.healed.some((entry) => entry.field === 'price' && entry.selector === '.qz-8f31ab'));
+
+  // The offscreen document was created once and used for sanitizing.
+  assert.equal(chrome._calls.createDocument.length, 1);
+  assert.equal(chrome._calls.createDocument[0].reasons[0], 'DOM_PARSER');
+
+  const registry = (await storage.local.get(STORAGE_KEYS.SELECTORS))[STORAGE_KEYS.SELECTORS];
+  assert.equal(registry['finance.yahoo.com'].price.selector, '.qz-8f31ab');
+  assert.equal(registry['finance.yahoo.com'].price.source, 'healed');
+
+  const healLog = (await storage.local.get(STORAGE_KEYS.HEAL_LOG))[STORAGE_KEYS.HEAL_LOG];
+  assert.ok(healLog.some((entry) => entry.healed === true));
+});
+
+test('a persisted healed selector is reused on the next scrape with no LLM call', async () => {
+  const url = 'https://finance.yahoo.com/quote/AAPL';
+  const storage = makeStorage({
+    [STORAGE_KEYS.SETTINGS]: { apiKey: 'sk-ant-test' },
+    [STORAGE_KEYS.SELECTORS]: {
+      'finance.yahoo.com': {
+        price: { selector: '.qz-8f31ab', strategy: 'css', source: 'healed' },
+        change_percentage: { selector: '.qz-delta-19c', strategy: 'css', source: 'healed' },
+        volume: { selector: '.qz-vol-77a', strategy: 'css', source: 'healed' },
+        news: { selector: '.story h3', strategy: 'css', source: 'healed' },
+      },
+    },
+  });
+  installChrome({ storage, tab: { url }, tabHandler: pageBackedTabHandler(BROKEN_PAGE, url), offscreenHandler: offscreenSanitize });
+  const fetchImpl = stubFetch(messageResponse({}));
+  globalThis.fetch = fetchImpl;
+
+  const result = await background.scrapeActiveTab();
+  assert.equal(result.snapshot.current_price, 224.5);
+  assert.deepEqual(result.healed, []);
+  assert.equal(fetchImpl.calls.length, 0, 'no repair call should be needed');
+});
+
+test('a selector the model invents but the page rejects is never persisted', async () => {
+  const url = 'https://finance.yahoo.com/quote/AAPL';
+  const storage = makeStorage({ [STORAGE_KEYS.SETTINGS]: { apiKey: 'sk-ant-test' } });
+  installChrome({ storage, tab: { url }, tabHandler: pageBackedTabHandler(BROKEN_PAGE, url), offscreenHandler: offscreenSanitize });
+  globalThis.fetch = stubFetch(messageResponse({
+    selector: '#does-not-exist', strategy: 'css', confidence: 0.95, reason: 'hallucinated',
+  }));
+
+  const result = await background.scrapeActiveTab();
+  assert.deepEqual(result.healed, []);
+  assert.ok(result.warnings.some((warning) => /Could not heal "price"/.test(warning)));
+  const registry = (await storage.local.get(STORAGE_KEYS.SELECTORS))[STORAGE_KEYS.SELECTORS];
+  assert.equal(registry, undefined);
+});
+
+test('a page-wide selector from the model is rejected before it reaches the page', async () => {
+  const url = 'https://finance.yahoo.com/quote/AAPL';
+  const storage = makeStorage({ [STORAGE_KEYS.SETTINGS]: { apiKey: 'sk-ant-test' } });
+  installChrome({ storage, tab: { url }, tabHandler: pageBackedTabHandler(BROKEN_PAGE, url), offscreenHandler: offscreenSanitize });
+  globalThis.fetch = stubFetch(messageResponse({ selector: '*', strategy: 'css', confidence: 1, reason: 'everything' }));
+
+  const result = await background.scrapeActiveTab();
+  assert.ok(result.warnings.some((warning) => /unusable selector/.test(warning)));
+});
+
+test('without an API key the scrape degrades instead of failing', async () => {
+  const url = 'https://finance.yahoo.com/quote/AAPL';
+  installChrome({ storage: makeStorage(), tab: { url }, tabHandler: pageBackedTabHandler(BROKEN_PAGE, url) });
+  globalThis.fetch = () => { throw new Error('the network must not be touched'); };
+
+  const result = await background.scrapeActiveTab();
+  assert.equal(result.snapshot.ticker, 'AAPL'); // recovered from the h1 / URL
+  assert.equal(result.snapshot.current_price, null);
+  assert.equal(result.usable, false);
+  assert.ok(result.warnings.some((warning) => /no API key configured/.test(warning)));
+});
+
+test('advice falls back to the rules engine when the model output is malformed', async () => {
+  installChrome({
+    storage: makeStorage({
+      [STORAGE_KEYS.SETTINGS]: { apiKey: 'sk-ant-test' },
+      [STORAGE_KEYS.PORTFOLIO]: { AAPL: { shares: 10, avg_cost: 180, target_sell_above: 220 } },
+    }),
+  });
+  globalThis.fetch = stubFetch(messageResponse({ action: 'YOLO', confidence_score: 3 }));
+
+  const advice = await background.adviseOn({ ticker: 'AAPL', current_price: 224.5, currency: 'USD', change_value: 1.8, news: [] });
+  assert.equal(advice.source, 'heuristic');
+  assert.equal(advice.action, 'SELL');
+  assert.match(advice.note, /LLM advice unavailable/);
+  assert.equal(advice.user_action_required, true);
+});
+
+test('a valid model advisory is returned and forced human-in-the-loop', async () => {
+  installChrome({
+    storage: makeStorage({
+      [STORAGE_KEYS.SETTINGS]: { apiKey: 'sk-ant-test' },
+      [STORAGE_KEYS.PORTFOLIO]: { AAPL: { shares: 10, target_sell_above: 220 } },
+    }),
+  });
+  globalThis.fetch = stubFetch(messageResponse({
+    ticker: 'AAPL', action: 'SELL', confidence_score: 0.71,
+    rationale: 'Price cleared the configured sell target with strong volume.',
+    user_action_required: false, // the model must not be able to switch this off
+  }));
+
+  const advice = await background.adviseOn({ ticker: 'AAPL', current_price: 224.5, currency: 'USD', news: [] });
+  assert.equal(advice.source, 'llm');
+  assert.equal(advice.action, 'SELL');
+  assert.equal(advice.confidence_score, 0.71);
+  assert.equal(advice.user_action_required, true);
+});
+
+test('advice on an unusable snapshot is refused', async () => {
+  installChrome({ storage: makeStorage() });
+  await assert.rejects(() => background.adviseOn({ ticker: null, current_price: null }), /without a ticker and a price/);
+});
+
+test('the message router answers every documented request type', async () => {
+  const storage = makeStorage({ [STORAGE_KEYS.SELECTORS]: { 'a.com': { price: { selector: '#p' } } } });
+  installChrome({ storage });
+
+  const decision = await background.handleRequest({
+    type: MSG.RECORD_DECISION,
+    payload: { ticker: 'AAPL', suggested_action: 'SELL', final_action: 'SELL', verdict: 'APPROVED' },
+  });
+  assert.equal(decision.executed, false, 'the extension must never mark a decision as executed');
+  assert.ok(Date.parse(decision.decided_at));
+
+  const state = await background.handleRequest({ type: MSG.GET_STATE });
+  assert.equal(state.decisions.length, 1);
+  assert.equal(state.settings.model, 'claude-opus-5');
+  assert.ok(state.registry['a.com']);
+  assert.equal('apiKey' in state.settings, false, 'GET_STATE must not hand the key to the popup');
+  assert.equal(state.hasApiKey, false);
+
+  const reset = await background.handleRequest({ type: MSG.RESET_SELECTORS });
+  assert.deepEqual(reset.registry, {});
+
+  await assert.rejects(() => background.handleRequest({ type: 'NOPE' }), /Unknown message type/);
+});
+
+test('a tab whose URL activeTab has not revealed yet is still scraped', async () => {
+  const url = 'https://finance.yahoo.com/quote/AAPL';
+  const chrome = installChrome({
+    storage: makeStorage(),
+    tab: { url: undefined },
+    tabHandler: pageBackedTabHandler(HEALTHY_PAGE, url),
+  });
+  const result = await background.scrapeActiveTab();
+  assert.equal(result.usable, true);
+  assert.equal(result.host, 'finance.yahoo.com');
+  // The host-specific selectors were applied on the second pass.
+  assert.equal(result.snapshot.selectors_used.price_selector, '[data-testid="qsp-price"]');
+  assert.equal(chrome._calls.executeScript.length, 0);
+});
+
+test('an injection Chrome refuses is reported as an unscrapable page', async () => {
+  installChrome({
+    storage: makeStorage(),
+    tab: { url: undefined },
+    tabHandler: async () => undefined,
+  });
+  globalThis.chrome.scripting.executeScript = async () => {
+    throw new Error('Cannot access contents of the page');
+  };
+  await assert.rejects(() => background.scrapeActiveTab(), /cannot be scraped.*Cannot access contents/);
+});
+
+test('the offscreen parser is opened once per scrape and handed back', async () => {
+  const url = 'https://finance.yahoo.com/quote/AAPL';
+  const storage = makeStorage({ [STORAGE_KEYS.SETTINGS]: { apiKey: 'sk-ant-test' } });
+  const chrome = installChrome({
+    storage,
+    tab: { url },
+    tabHandler: pageBackedTabHandler(BROKEN_PAGE, url),
+    offscreenHandler: offscreenSanitize,
+  });
+  globalThis.fetch = stubFetch(messageResponse({ selector: '.qz-8f31ab', strategy: 'css', confidence: 0.9, reason: 'value node' }));
+
+  await background.scrapeActiveTab();
+  assert.equal(chrome._calls.createDocument.length, 1, 'several repairs must share one offscreen document');
+  assert.equal(chrome._calls.closeDocument.length, 1, 'the offscreen document must be released');
+
+  // A second scrape can open it again — which would throw if it was left open.
+  closePage();
+  globalThis.chrome.tabs.sendMessage = (await (async () => {
+    const handler = pageBackedTabHandler(BROKEN_PAGE, url);
+    return async (_tabId, message) => handler(message);
+  })());
+  await background.scrapeActiveTab();
+  assert.equal(chrome._calls.createDocument.length, 2);
+  assert.equal(chrome._calls.closeDocument.length, 2);
+});

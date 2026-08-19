@@ -1,0 +1,31 @@
+{
+  "manifest_version": 3,
+  "name": "Self-Healing Market Scraper & Advisory Engine",
+  "version": "1.0.0",
+  "description": "Scrapes live market data from the active tab, self-heals broken DOM selectors with an LLM, and proposes BUY/SELL/HOLD with rationale. You always decide.",
+  "minimum_chrome_version": "116",
+  "permissions": ["activeTab", "storage", "scripting", "offscreen"],
+  "host_permissions": ["https://api.anthropic.com/*"],
+  "background": {
+    "service_worker": "src/background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_title": "Market Advisory Engine",
+    "default_popup": "src/popup.html",
+    "default_icon": {
+      "16": "src/icons/icon16.png",
+      "48": "src/icons/icon48.png",
+      "128": "src/icons/icon128.png"
+    }
+  },
+  "options_page": "src/options.html",
+  "icons": {
+    "16": "src/icons/icon16.png",
+    "48": "src/icons/icon48.png",
+    "128": "src/icons/icon128.png"
+  },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'"
+  }
+}

@@ -1,0 +1,194 @@
+/** Test doubles for the Chrome extension APIs and a jsdom page loader. */
+import { JSDOM } from 'jsdom';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+
+/** Minimal in-memory `chrome.storage.local` with the promise-based MV3 API. */
+export function makeStorage(initial = {}) {
+  let data = structuredClone(initial);
+  return {
+    _dump: () => structuredClone(data),
+    local: {
+      async get(keys) {
+        if (keys === null || keys === undefined) return structuredClone(data);
+        const list = Array.isArray(keys) ? keys : [keys];
+        const out = {};
+        for (const key of list) if (key in data) out[key] = structuredClone(data[key]);
+        return out;
+      },
+      async set(items) {
+        data = { ...data, ...structuredClone(items) };
+      },
+      async clear() {
+        data = {};
+      },
+    },
+  };
+}
+
+/**
+ * Installs a `globalThis.chrome` double.
+ * `tabHandler(message)` stands in for the content script.
+ */
+export function installChrome({ storage = makeStorage(), tab = {}, tabHandler = async () => null, offscreenHandler = null } = {}) {
+  const calls = { executeScript: [], createDocument: [], closeDocument: [], runtimeMessages: [] };
+  const chrome = {
+    _calls: calls,
+    storage,
+    runtime: {
+      lastError: null,
+      onMessage: { addListener() {} },
+      async getContexts() {
+        const open = calls.createDocument.length > calls.closeDocument.length;
+        return open ? [{ contextType: 'OFFSCREEN_DOCUMENT' }] : [];
+      },
+      async sendMessage(message) {
+        calls.runtimeMessages.push(message);
+        if (offscreenHandler) return offscreenHandler(message);
+        return null;
+      },
+      openOptionsPage() {},
+    },
+    tabs: {
+      async query() {
+        return [{ id: 7, url: 'https://finance.example.com/quote/AAPL', ...tab }];
+      },
+      async sendMessage(_tabId, message) {
+        const response = await tabHandler(message);
+        if (response === undefined) throw new Error('Could not establish connection.');
+        return response;
+      },
+    },
+    scripting: {
+      async executeScript(options) {
+        calls.executeScript.push(options);
+        return [{ result: null }];
+      },
+    },
+    offscreen: {
+      async createDocument(options) {
+        if (calls.createDocument.length > calls.closeDocument.length) {
+          throw new Error('Only a single offscreen document may be created.');
+        }
+        calls.createDocument.push(options);
+      },
+      async closeDocument() {
+        calls.closeDocument.push(Date.now());
+      },
+    },
+  };
+  globalThis.chrome = chrome;
+  return chrome;
+}
+
+export function uninstallChrome() {
+  delete globalThis.chrome;
+}
+
+const root = new URL('../', import.meta.url);
+
+export function readSource(relativePath) {
+  return readFileSync(fileURLToPath(new URL(relativePath, root)), 'utf8');
+}
+
+/** Builds a jsdom window and exposes it on the globals the source expects. */
+export function makePage(html, { url = 'https://finance.example.com/quote/AAPL' } = {}) {
+    // `outside-only` gives the page a real `window.eval` in the jsdom realm
+  // without letting the fixture's own <script> tags run.
+  const dom = new JSDOM(html, { url, runScripts: 'outside-only' });
+  const { window } = dom;
+  const previous = {
+    window: globalThis.window,
+    document: globalThis.document,
+    location: globalThis.location,
+    Node: globalThis.Node,
+    NodeFilter: globalThis.NodeFilter,
+    XPathResult: globalThis.XPathResult,
+    DOMParser: globalThis.DOMParser,
+  };
+  globalThis.window = window;
+  globalThis.document = window.document;
+  globalThis.Node = window.Node;
+  globalThis.NodeFilter = window.NodeFilter;
+  globalThis.XPathResult = window.XPathResult;
+  globalThis.DOMParser = window.DOMParser;
+  return {
+    window,
+    document: window.document,
+    restore() {
+      for (const [key, value] of Object.entries(previous)) {
+        if (value === undefined) delete globalThis[key];
+        else globalThis[key] = value;
+      }
+      window.close();
+    },
+  };
+}
+
+/** Loads `src/content.js` into a jsdom page and returns its exposed internals. */
+export function loadContentScript(page) {
+  const source = readSource('src/content.js');
+  // Listeners accumulate across injections so a test can assert the guard held.
+  const listeners = page.window.__listeners || (page.window.__listeners = []);
+  page.window.chrome = {
+    runtime: {
+      onMessage: {
+        addListener(fn) {
+          listeners.push(fn);
+          page.window.__listenerCount = listeners.length;
+        },
+      },
+    },
+  };
+  page.window.eval(source);
+  const api = page.window.__selfHealingMarketScraper__;
+  return {
+    api,
+    /**
+     * Drives the script through its real message listener. The response is
+     * round-tripped through JSON because chrome.runtime messaging serializes
+     * it the same way — and it detaches the value from the jsdom realm.
+     */
+    send(message) {
+      return new Promise((resolve) => {
+        listeners[0](message, {}, (response) => resolve(JSON.parse(JSON.stringify(response))));
+      });
+    },
+  };
+}
+
+/** A stub `fetch` that returns the given Anthropic-shaped JSON body. */
+export function stubFetch(responses) {
+  const queue = Array.isArray(responses) ? [...responses] : [responses];
+  const calls = [];
+  const impl = async (url, init) => {
+    calls.push({ url, init, body: JSON.parse(init.body) });
+    const next = queue.length > 1 ? queue.shift() : queue[0];
+    if (typeof next === 'function') return next(url, init);
+    const { status = 200, json = {}, text = null } = next;
+    return {
+      ok: status >= 200 && status < 300,
+      status,
+      statusText: String(status),
+      async text() {
+        return text === null ? JSON.stringify(json) : text;
+      },
+    };
+  };
+  impl.calls = calls;
+  return impl;
+}
+
+/** Anthropic response envelope carrying one structured-output JSON payload. */
+export function messageResponse(payload) {
+  return {
+    json: {
+      id: 'msg_test',
+      type: 'message',
+      model: 'claude-opus-5',
+      stop_reason: 'end_turn',
+      content: [{ type: 'text', text: JSON.stringify(payload) }],
+      usage: { input_tokens: 100, output_tokens: 50 },
+    },
+  };
+}

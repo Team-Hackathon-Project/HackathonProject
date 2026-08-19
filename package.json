@@ -1,0 +1,16 @@
+{
+  "name": "self-healing-market-scraper",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Chrome MV3 extension: self-healing market scraper and advisory engine.",
+  "type": "module",
+  "scripts": {
+    "test": "node --test",
+    "lint": "node scripts/validate.mjs",
+    "icons": "node scripts/make-icons.mjs",
+    "check": "npm run lint && npm test"
+  },
+  "devDependencies": {
+    "jsdom": "^30.0.1"
+  }
+}

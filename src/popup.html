@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Market Advisory Engine</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <span class="mark" aria-hidden="true"></span>
+        <div>
+          <h1>Market Advisory</h1>
+          <p class="sub" id="context-line">Self-healing scraper</p>
+        </div>
+      </div>
+      <button id="options-btn" class="icon-btn" type="button" title="Options">Settings</button>
+    </header>
+
+    <main>
+      <button id="scrape-btn" class="primary" type="button">Scan this tab</button>
+
+      <p id="status" class="status" role="status" aria-live="polite"></p>
+
+      <section id="snapshot-card" class="card hidden" aria-labelledby="snapshot-title">
+        <div class="card-head">
+          <h2 id="snapshot-title" class="ticker">—</h2>
+          <span id="snapshot-change" class="change"></span>
+        </div>
+        <p class="price"><span id="snapshot-price">—</span> <span id="snapshot-currency" class="muted"></span></p>
+        <dl class="metrics">
+          <div><dt>Volume</dt><dd id="snapshot-volume">—</dd></div>
+          <div><dt>Scraped</dt><dd id="snapshot-time">—</dd></div>
+        </dl>
+        <details id="snapshot-news-wrap" class="hidden">
+          <summary>Headlines on page</summary>
+          <ul id="snapshot-news"></ul>
+        </details>
+        <details>
+          <summary>Selectors used</summary>
+          <ul id="snapshot-selectors" class="mono"></ul>
+        </details>
+      </section>
+
+      <section id="heal-banner" class="banner heal hidden" role="status"></section>
+      <section id="warn-banner" class="banner warn hidden" role="status"></section>
+
+      <section id="advice-card" class="card hidden" aria-labelledby="advice-title">
+        <div class="card-head">
+          <h2 id="advice-title">Advisory</h2>
+          <span id="advice-action" class="badge">—</span>
+        </div>
+        <div class="confidence">
+          <div class="confidence-track"><div id="advice-bar" class="confidence-fill"></div></div>
+          <span id="advice-score" class="muted">—</span>
+        </div>
+        <p id="advice-rationale" class="rationale"></p>
+        <p id="advice-source" class="muted small"></p>
+        <p class="disclaimer">Recommendation only. This extension never places an order — you decide and execute yourself.</p>
+        <div class="actions">
+          <button id="approve-btn" class="approve" type="button">Approve</button>
+          <button id="reject-btn" class="reject" type="button">Reject</button>
+          <button id="override-btn" class="override" type="button">Override…</button>
+        </div>
+        <div id="override-panel" class="override-panel hidden">
+          <label for="override-action">Your call</label>
+          <select id="override-action">
+            <option value="BUY">BUY</option>
+            <option value="SELL">SELL</option>
+            <option value="HOLD">HOLD</option>
+          </select>
+          <input id="override-note" type="text" maxlength="200" placeholder="Why? (optional)" />
+          <button id="override-confirm" class="primary small" type="button">Log override</button>
+        </div>
+      </section>
+
+      <section id="log-card" class="card hidden">
+        <h2>Recent decisions</h2>
+        <ul id="decision-log" class="log"></ul>
+      </section>
+    </main>
+
+    <div id="modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+      <div class="modal-box">
+        <h3 id="modal-title">Confirm your decision</h3>
+        <p id="modal-body"></p>
+        <p class="disclaimer">Nothing is sent to a broker. This records your decision in local extension storage only.</p>
+        <div class="modal-actions">
+          <button id="modal-cancel" class="reject" type="button">Cancel</button>
+          <button id="modal-confirm" class="primary small" type="button">Confirm</button>
+        </div>
+      </div>
+    </div>
+
+    <script type="module" src="popup.js"></script>
+  </body>
+</html>
