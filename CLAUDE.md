@@ -1,48 +1,40 @@
 # Project: Autonomous Self-Healing Market Scraper & Advisory Engine
 
 ## Project Architecture & Core Philosophy
-This project is an intelligent financial tracking assistant that combines continuous web scraping with LLM reasoning. It monitors portfolio assets, extracts targeted financial metrics, resilience-tests scraping logic, and generates actionable "Buy/Hold/Sell" suggestions with explicit rationale. The user always retains final decision-making authority (Human-in-the-Loop).
+This project is an intelligent financial tracking tool built as a hybrid **Chrome Extension (Manifest V3)** and **Agent Engine**. It operates directly within the user's browser, allowing them to scrape active financial tabs, track portfolio metrics, repair broken DOM selectors automatically, and receive AI-generated Buy/Hold/Sell suggestions with explicit rationale. The user always retains final decision-making authority (Human-in-the-Loop).
 
-### Core Architectural Components
-1. **Self-Healing Scraper Engine**
-   - Headless browser/DOM observer (Playwright or Puppeteer + Cheerio).
-   - Dynamic selector recovery: If CSS selectors fail, fallback to LLM/vision-based element extraction to identify stock price, percentage change, and news blocks, then auto-update the selector registry.
-   - Strict content filtering: Strips out header navigation, footers, ads, and irrelevant scripts—returning only normalized financial payload data.
+---
 
-2. **Data Pipeline & Analysis Engine**
-   - Real-time normalization of ticker symbols, live stock values, target indicators, and raw sentiment scores.
-   - Structured JSON output format for all extracted data.
+## Technical Architecture & Chrome Extension Specs
 
-3. **Recommendation & Reasoning Agent**
-   - Rules + LLM hybrid engine evaluating live stock performance against portfolio context.
-   - Generates advisory signals (`BUY`, `SELL`, `HOLD`) accompanied by concise, evidence-based reasoning ("Valid Reason").
+### 1. Hybrid Architecture (Extension + Agent Service)
+- **Extension Content Script (`content.js`):** Injected directly into trading/financial websites. Extracts active DOM elements (price, percentage change, volume, news block) and passes them to the background worker.
+- **Service Worker (`background.js`):** Coordinates DOM extraction events, manages extension storage (`chrome.storage.local`), handles communication with the LLM backend, and maintains the selector registry.
+- **Offscreen Document (`offscreen.html` / `offscreen.js`):** Used to handle heavy parsing tasks or background HTML fetching without stalling the active browser tab.
+- **Popup UI (`popup.html` / `popup.jsx`):** Displays clean stock metrics, live advisory cards (BUY/SELL/HOLD + Rationale), and action buttons where the user explicitly approves or rejects trading moves.
 
-4. **Human-in-the-Loop UI / Control Plane**
-   - Clean dashboard showing clean stock cards and actionable alerts.
-   - Decision interface where users approve, reject, or execute proposed actions.
+### 2. Self-Healing Mechanism (Extension Context)
+1. Content script attempts parsing using the active selector from `chrome.storage.local`.
+2. On lookup failure or DOM structure mutation:
+   - Content script captures the surrounding parent HTML container.
+   - Message sent to background service worker: `EVENT: SELECTOR_FAILED`.
+   - Service worker queries LLM (via backend or direct API call) with the broken DOM snippet: *"Find the updated element containing the live stock value and return a valid CSS/XPath selector."*
+   - Extension auto-updates `chrome.storage.local` with the new selector and re-runs extraction seamlessly.
 
 ---
 
 ## Technical Guidelines & Coding Standards
 
-### Python / Node.js Standards
-- **Strict Typing:** Always enforce Type Hints (Python `mypy` / TypeScript).
-- **Error Handling:** Every scraping task must catch element lookup failures explicitly and pass the broken DOM context to the `SelfHealingResolver`.
-- **Selector Ledger:** Store selectors in a central registry (JSON/YAML/Database). Never hardcode CSS/XPath strings inside execution scripts.
-
-### Self-Healing Flow
-1. Attempt data extraction using standard CSS selectors.
-2. On DOM mutation / failure:
-   - Capture DOM snippet containing target values.
-   - Send DOM snippet to LLM with instructions: *"Extract target value and identify the updated CSS/XPath selector."*
-   - Update the selector registry automatically and retry extraction.
-3. Log auto-repair events to an audit trail.
+- **Manifest V3 Standards:** Strict adherence to Manifest V3 service worker lifecycles (no persistent background pages).
+- **Permissions Scope:** Keep permissions strictly bounded (`activeTab`, `storage`, `scripting`, `offscreen`).
+- **No Direct Autotrading:** The extension ONLY provides recommendations and reasonings. The UI must present a confirmation modal before taking any final action.
+- **Data Normalization:** All scraped data must be stripped of extraneous page bloat (ads, navigation header, footer) and stored as structured JSON.
 
 ---
 
-## Target Output Specs
+## Data Schemas
 
-### Scraping Payload (Normalized JSON)
+### Scraping Payload (`chrome.storage.local`)
 ```json
 {
   "ticker": "AAPL",
@@ -50,10 +42,10 @@ This project is an intelligent financial tracking assistant that combines contin
   "currency": "USD",
   "change_percentage": "+1.8%",
   "extracted_at": "2026-08-19T20:55:00Z",
-  "market_signals": [
-    "Q3 earnings beat expectations",
-    "RSI indicator approaching oversold boundary"
-  ]
+  "source_url": "[https://finance.example.com/quote/AAPL](https://finance.example.com/quote/AAPL)",
+  "selectors_used": {
+    "price_selector": "#quote-header-info span[data-reactid]"
+  }
 }
 ```
 
