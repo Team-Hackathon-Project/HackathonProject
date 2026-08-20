@@ -1,3 +1,6 @@
 node_modules/
 *.log
 .DS_Store
+dist/
+e2e/shots/
+e2e/shots-heal/

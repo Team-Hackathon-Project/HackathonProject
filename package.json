@@ -8,9 +8,13 @@
     "test": "node --test",
     "lint": "node scripts/validate.mjs",
     "icons": "node scripts/make-icons.mjs",
-    "check": "npm run lint && npm test"
+    "check": "npm run lint && npm test",
+    "package": "node scripts/package.mjs",
+    "e2e": "node e2e/quote-page.mjs",
+    "e2e:heal": "node e2e/self-healing.mjs"
   },
   "devDependencies": {
-    "jsdom": "^30.0.1"
+    "jsdom": "^30.0.1",
+    "puppeteer-core": "^23.11.1"
   }
 }

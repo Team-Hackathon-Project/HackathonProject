@@ -19,6 +19,7 @@ export const MSG = {
   // background -> content
   EXTRACT: 'EXTRACT',
   VALIDATE_SELECTOR: 'VALIDATE_SELECTOR',
+  CAPTURE_CONTAINER: 'CAPTURE_CONTAINER',
   // background -> offscreen
   SANITIZE_HTML: 'SANITIZE_HTML',
 };

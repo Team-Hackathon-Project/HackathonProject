@@ -44,7 +44,14 @@ src/
 scripts/
   validate.mjs             Static bundle validation (npm run lint)
   make-icons.mjs           Dependency-free PNG icon generator
-test/                      122 tests: node:test + jsdom
+  package.mjs              Builds dist/<name>-<version>.zip (npm run package)
+e2e/
+  harness.mjs              Shared browser plumbing (staging, popup driver)
+  quote-page.mjs           Live-site run: scan → advise → approve → log
+  self-healing.mjs         Deterministic repair run against a mangled page
+docs/
+  DEMO.md                  Three-minute demo script, with real screenshots
+test/                      129 tests: node:test + jsdom
 ```
 
 ## How the self-healing loop works
@@ -127,12 +134,54 @@ Advisory output:
 ## Commands
 
 ```bash
-npm run check   # static validation + the full test suite
+npm run check     # static validation + the full test suite (129 tests)
+npm run package   # dist/self-healing-market-scraper-<version>.zip
+npm run e2e       # drive the real extension in a real browser, live site
+npm run e2e:heal  # drive the repair loop against a mangled page, offline
 ```
 
 `npm run lint` alone runs `scripts/validate.mjs`, which catches the failures
 Chrome only reports at load time: manifest shape, permission drift, missing
 files, unresolvable module imports, and ES syntax sneaking into `content.js`.
+
+`npm run package` writes a zip containing exactly `manifest.json` and `src/` —
+no tests, no scripts, no repo metadata — for upload or for handing to someone
+who just wants to unzip and **Load unpacked**. It is written with `node:zlib`,
+so packaging adds no dependency either.
+
+`npm run e2e` takes an optional URL (`npm run e2e -- https://…`) and writes
+screenshots to `e2e/shots/`. Both e2e scripts run from a throwaway copy of the
+extension with `host_permissions` widened for the site under test: `activeTab`
+is only granted by a human clicking the toolbar icon, and no automation protocol
+can produce that click. The shipped manifest keeps its narrow permission set.
+
+## What has been verified in a real browser
+
+The `e2e/` scripts load the extension into a real Chromium browser and drive the
+real action popup — service worker, injected content script, offscreen parser
+and all. Results from the last sweep:
+
+| Page | Result |
+| --- | --- |
+| `finance.yahoo.com/quote/AAPL` | All five fields from the shipped defaults; no healing needed |
+| `stockanalysis.com/stocks/aapl` | Ticker, price, volume and news; `change_percentage` needs healing |
+| `marketwatch.com/investing/stock/aapl` | Ticker, price, change and news; the page carries no volume figure |
+| `google.com/finance/quote/AAPL:NASDAQ` | Ticker (from the URL) and volume; Finance Beta rewrote the page, so price needs healing |
+| Local page with mangled markup | Healing repairs `price`; wrong-field proposals are refused |
+| The packaged zip, extracted | Scan → advise → approve → log, all working |
+
+Two notes on reading that table. Live sites rate-limit and A/B test — MarketWatch
+served an anti-bot interstitial on a later run, and the extension correctly
+reported every field missing rather than inventing one. And Google Finance is
+the honest case for this whole project: their markup moved, no stable hook
+survived, and rather than ship a selector that returns an index level instead of
+the instrument, that field is left to the repair loop.
+
+See [docs/DEMO.md](docs/DEMO.md) for the screenshots and the demo script.
+
+Note that `activeTab` is granted only when *you* invoke the extension from the
+toolbar, so a scan always starts from a real click — there is no way for the
+extension to read a tab you have not handed it.
 
 ## Deviations from the original spec
 

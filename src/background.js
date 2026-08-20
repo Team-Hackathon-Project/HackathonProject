@@ -13,13 +13,16 @@ import {
   MSG, OFFSCREEN_TARGET, OFFSCREEN_PATH, FIELDS, SNIPPET_LIMIT,
 } from './lib/constants.js';
 import { candidatesFor, isPlausibleSelector } from './lib/selectors.js';
-import { buildSnapshot, isUsableSnapshot } from './lib/normalize.js';
+import { buildSnapshot, isUsableSnapshot, valueFitsField } from './lib/normalize.js';
 import { heuristicAdvice, validateAdvice, buildAdvisoryContext } from './lib/advisor.js';
 import { healSelector, requestAdvice, LlmError } from './lib/llm.js';
 import {
   getSettings, getPortfolio, getRegistry, recordHealedSelector, clearRegistry,
   saveSnapshot, getSnapshots, recordDecision, getDecisions, recordHealEvent, getHealLog,
 } from './lib/storage.js';
+
+/** How far down the candidate list one bad match may push us. */
+const MAX_CANDIDATE_RETRIES = 4;
 
 const RESTRICTED_SCHEMES = ['chrome:', 'chrome-extension:', 'edge:', 'about:', 'devtools:', 'view-source:'];
 const CHROME_WEBSTORE = /^https:\/\/chromewebstore\.google\.com/;
@@ -203,6 +206,12 @@ async function healField({ tabId, host, field, snippet, tried, settings }) {
       payload: { field, selector: proposal.selector, strategy: proposal.strategy },
     });
     if (!check || !check.ok) throw new Error((check && check.error) || 'validation in the page failed');
+    // A selector that resolves is not yet a selector that is *right*: the model
+    // can point at a neighbouring node. Refuse to persist one whose value is
+    // the wrong shape for the field.
+    if (!valueFitsField(field, check.value)) {
+      throw new Error(`selector matched, but "${String(check.value).slice(0, 60)}" is not a valid ${field}`);
+    }
 
     const stored = await recordHealedSelector(host, field, proposal);
     attempt.healed = true;
@@ -240,20 +249,69 @@ export async function scrapeActiveTab() {
   // If we could not read the tab URL up front, the candidate list was built
   // from the generic fallbacks. Now that the page has told us its host, retry
   // once with the host-specific selectors.
+  let candidateMap = candidates;
   if (!host && result.host) {
+    const hostCandidates = await buildCandidateMap(result.host, registry);
     const retry = await sendToTab(tab.id, {
       type: MSG.EXTRACT,
-      payload: { candidates: await buildCandidateMap(result.host, registry), snippetLimit: SNIPPET_LIMIT },
+      payload: { candidates: hostCandidates, snippetLimit: SNIPPET_LIMIT },
     });
-    if (retry && retry.ok) result = retry;
+    if (retry && retry.ok) {
+      result = retry;
+      candidateMap = hostCandidates;
+    }
   }
 
   const raw = { ...result.raw };
   const used = { ...result.used };
   const healed = [];
   const warnings = [];
+  const failures = [...(result.failures || [])];
 
-  const failures = result.failures || [];
+  // A selector can match a real node and still hand back the wrong kind of
+  // value — a "Volume" label instead of the count, a price where a percentage
+  // belongs. Treat that exactly like a miss: drop it, fetch the container, and
+  // let the repair path have a go at it.
+  for (const [field, value] of Object.entries(result.raw || {})) {
+    if (value === null || value === undefined || Array.isArray(value)) continue;
+    if (valueFitsField(field, value)) continue;
+
+    const rejected = [];
+    let current = { value, entry: used[field] };
+    // Walk down the remaining candidates; a junk match must not stop the list.
+    for (let attempt = 0; attempt < MAX_CANDIDATE_RETRIES && current && !valueFitsField(field, current.value); attempt++) {
+      if (current.entry) rejected.push(current.entry.selector);
+      const remaining = (candidateMap[field] || []).filter((entry) => !rejected.includes(entry.selector));
+      if (!remaining.length) { current = null; break; }
+      const next = await sendToTab(tab.id, {
+        type: MSG.EXTRACT,
+        payload: { candidates: { [field]: remaining }, snippetLimit: SNIPPET_LIMIT },
+      });
+      const nextValue = next && next.ok ? next.raw[field] : null;
+      current = nextValue === null || nextValue === undefined
+        ? null
+        : { value: nextValue, entry: next.used[field] };
+    }
+
+    if (current && valueFitsField(field, current.value)) {
+      raw[field] = current.value;
+      used[field] = current.entry;
+      continue;
+    }
+
+    const container = await sendToTab(tab.id, {
+      type: MSG.CAPTURE_CONTAINER,
+      payload: { field, snippetLimit: SNIPPET_LIMIT },
+    });
+    failures.push({
+      field,
+      snippet: (container && container.ok && container.snippet) || '',
+      tried: rejected,
+      mismatch: String(value).slice(0, 60),
+    });
+    raw[field] = null;
+    delete used[field];
+  }
   if (failures.length && settings.selfHealEnabled && settings.apiKey) {
     try {
       // Heal sequentially: each call is a separate LLM round trip and the
@@ -282,7 +340,11 @@ export async function scrapeActiveTab() {
     }
   } else if (failures.length) {
     const reason = !settings.apiKey ? 'no API key configured' : 'self-healing is disabled in options';
-    for (const failure of failures) warnings.push(`Missing "${failure.field}" (${reason}).`);
+    for (const failure of failures) {
+      warnings.push(failure.mismatch
+        ? `Ignored "${failure.field}": the page returned "${failure.mismatch}" (${reason}).`
+        : `Missing "${failure.field}" (${reason}).`);
+    }
   }
 
   const selectorsUsed = {};

@@ -75,3 +75,10 @@ test('shipped defaults are syntactically usable', () => {
     }
   }
 });
+
+test('the structural volume fallback survives a class-name rewrite', () => {
+  const candidates = candidatesFor('unknown.example', 'volume', {});
+  const structural = candidates.filter((entry) => entry.strategy === 'xpath');
+  assert.ok(structural.length >= 1, 'expected a label-anchored xpath fallback for volume');
+  assert.ok(structural.every((entry) => /Volume/.test(entry.selector)));
+});

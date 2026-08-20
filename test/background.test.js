@@ -7,7 +7,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { makeStorage, installChrome, uninstallChrome, stubFetch, messageResponse } from './helpers.mjs';
 import { MSG, STORAGE_KEYS } from '../src/lib/constants.js';
-import { HEALTHY_PAGE, BROKEN_PAGE } from './fixtures/pages.mjs';
+import { HEALTHY_PAGE, BROKEN_PAGE, MISLEADING_PAGE, MISLEADING_ONLY_PAGE } from './fixtures/pages.mjs';
 import { makePage, loadContentScript } from './helpers.mjs';
 
 let background;
@@ -191,6 +191,63 @@ test('a selector the model invents but the page rejects is never persisted', asy
   assert.ok(result.warnings.some((warning) => /Could not heal "price"/.test(warning)));
   const registry = (await storage.local.get(STORAGE_KEYS.SELECTORS))[STORAGE_KEYS.SELECTORS];
   assert.equal(registry, undefined);
+});
+
+test('a junk match does not stop the candidate list', async () => {
+  // `[class*="volume" i]` matches the "Volume" *label*; the count lives in the
+  // next cell, which the structural fallback further down the list finds.
+  const url = 'https://finance.yahoo.com/quote/AAPL';
+  installChrome({ storage: makeStorage(), tab: { url }, tabHandler: pageBackedTabHandler(MISLEADING_PAGE, url) });
+  globalThis.fetch = () => { throw new Error('the network must not be touched'); };
+
+  const result = await background.scrapeActiveTab();
+
+  assert.equal(result.snapshot.volume, 52300000);
+  assert.equal(result.snapshot.current_price, 224.5);
+  assert.deepEqual(result.warnings, []);
+});
+
+test('a field with only a junk match is reported, not invented', async () => {
+  const url = 'https://finance.yahoo.com/quote/AAPL';
+  installChrome({ storage: makeStorage(), tab: { url }, tabHandler: pageBackedTabHandler(MISLEADING_ONLY_PAGE, url) });
+  globalThis.fetch = () => { throw new Error('the network must not be touched'); };
+
+  const result = await background.scrapeActiveTab();
+
+  assert.equal(result.snapshot.volume, null);
+  assert.ok(result.warnings.some((warning) => /Ignored "volume".*"Volume"/.test(warning)));
+  assert.equal(result.snapshot.selectors_used.volume_selector, undefined);
+  assert.equal(result.usable, true); // ticker + price still recovered
+});
+
+test('a selector that resolves to the wrong kind of value is never persisted', async () => {
+  // `.qz-delta-19c` holds "(+1.80%)" — a real node, but not a price. The
+  // model pointing one field at another field's node must not poison the
+  // registry or invent a number in the snapshot.
+  const url = 'https://finance.yahoo.com/quote/AAPL';
+  const storage = makeStorage({ [STORAGE_KEYS.SETTINGS]: { apiKey: 'sk-ant-test' } });
+  installChrome({ storage, tab: { url }, tabHandler: pageBackedTabHandler(BROKEN_PAGE, url), offscreenHandler: offscreenSanitize });
+  globalThis.fetch = stubFetch(messageResponse({
+    selector: '.qz-delta-19c', strategy: 'css', confidence: 0.9, reason: 'looks like the value node',
+  }));
+
+  const result = await background.scrapeActiveTab();
+
+  assert.ok(result.warnings.some((warning) => /is not a valid price/.test(warning)));
+  assert.equal(result.snapshot.current_price, null);
+  assert.ok(!result.healed.some((entry) => entry.field === 'price'));
+
+  const registry = (await storage.local.get(STORAGE_KEYS.SELECTORS))[STORAGE_KEYS.SELECTORS] || {};
+  const host = (registry['finance.yahoo.com'] || {});
+  assert.equal(host.price, undefined);
+  assert.equal(host.news, undefined);
+  // The one field the selector genuinely fits is still allowed through.
+  assert.equal(host.change_percentage.selector, '.qz-delta-19c');
+
+  const healLog = (await storage.local.get(STORAGE_KEYS.HEAL_LOG))[STORAGE_KEYS.HEAL_LOG] || [];
+  const priceAttempt = healLog.find((entry) => entry.field === 'price');
+  assert.equal(priceAttempt.healed, false);
+  assert.match(priceAttempt.error, /not a valid price/);
 });
 
 test('a page-wide selector from the model is rejected before it reaches the page', async () => {

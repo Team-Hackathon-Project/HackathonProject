@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   cleanText, parsePrice, parseDecimal, parseChangePercentage, parseVolume,
-  parseTicker, tickerFromUrl, normalizeNews, buildSnapshot, isUsableSnapshot, detectCurrency,
+  parseTicker, tickerFromUrl, normalizeNews, buildSnapshot, isUsableSnapshot, detectCurrency, valueFitsField,
 } from '../src/lib/normalize.js';
 
 test('cleanText strips zero-width, nbsp and collapses whitespace', () => {
@@ -108,4 +108,48 @@ test('a wrapping parenthesis only means negative without an explicit sign', () =
   assert.deepEqual(parseChangePercentage('(-1.80%)'), { value: -1.8, text: '-1.80%' });
   assert.deepEqual(parseChangePercentage('(1.80%)'), { value: -1.8, text: '-1.80%' });
   assert.deepEqual(parseChangePercentage('+1.80% (up today)'), { value: 1.8, text: '+1.80%' });
+});
+
+test('valueFitsField keeps a value out of a field it does not belong to', () => {
+  // The bug this guards: parseVolume("$182.44") returns 182, so a price
+  // selector healed onto the volume field silently invents a share count.
+  assert.equal(valueFitsField('volume', '$182.44'), false);
+  assert.equal(valueFitsField('volume', '+2.41%'), false);
+  assert.equal(valueFitsField('volume', 'Vol 44,102,880'), true);
+  assert.equal(valueFitsField('volume', '52.3M'), true);
+
+  assert.equal(valueFitsField('price', '+2.41%'), false);
+  assert.equal(valueFitsField('price', '(1.80%)'), false);
+  assert.equal(valueFitsField('price', '(+1.80%)'), false);
+  assert.equal(valueFitsField('price', '$182.44'), true);
+  assert.equal(valueFitsField('price', '182.44 (+1.80%)'), true);
+
+  assert.equal(valueFitsField('change_percentage', '224.50'), false);
+  assert.equal(valueFitsField('change_percentage', '(+1.80%)'), true);
+
+  assert.equal(valueFitsField('ticker', 'Apple Inc. (AAPL)'), true);
+  assert.equal(valueFitsField('ticker', '...'), false);
+
+  assert.equal(valueFitsField('price', ''), false);
+  assert.equal(valueFitsField('volume', null), false);
+});
+
+test('buildSnapshot drops fields whose scraped text is the wrong shape', () => {
+  const snapshot = buildSnapshot({
+    ticker: 'NVDA',
+    price: '$182.44',
+    change_percentage: '$182.44', // a price node aimed at the change field
+    volume: '$182.44',            // ...and at the volume field
+    news: [],
+  }, { source_url: 'https://example.com/quote/NVDA' });
+
+  assert.equal(snapshot.current_price, 182.44);
+  assert.equal(snapshot.change_percentage, null);
+  assert.equal(snapshot.volume, null); // not 182
+});
+
+test('buildSnapshot refuses a percentage as the price', () => {
+  const snapshot = buildSnapshot({ ticker: 'NVDA', price: '+2.41%' }, {});
+  assert.equal(snapshot.current_price, null);
+  assert.equal(isUsableSnapshot(snapshot), false);
 });

@@ -54,3 +54,37 @@ export const EMPTY_PAGE = `
 <!doctype html>
 <html><head><title>About us</title></head>
 <body><main><h1>About our company</h1><p>We are a company that does things.</p></main></body></html>`;
+
+/**
+ * A page where an early generic selector matches a real element that holds the
+ * wrong kind of value: `[class*="volume" i]` lands on the *label*, not the
+ * count. The structural fallback further down the list has the real number.
+ */
+export const MISLEADING_PAGE = `
+<!doctype html>
+<html><head><title>Apple Inc. (AAPL) Stock Price</title></head>
+<body>
+  <main>
+    <section data-testid="quote-hdr"><h1>Apple Inc. (AAPL)</h1></section>
+    <span data-testid="qsp-price">224.50</span>
+    <span data-testid="qsp-price-change-percent">(+1.80%)</span>
+    <table>
+      <tr><td class="volume-label">Volume</td><td class="figure">52,300,000</td></tr>
+    </table>
+    <section data-testid="recent-news">
+      <div data-testid="storyitem"><h3>Apple beats earnings expectations again</h3></div>
+    </section>
+  </main>
+</body></html>`;
+
+/** Same shape, but with no usable volume anywhere on the page. */
+export const MISLEADING_ONLY_PAGE = `
+<!doctype html>
+<html><head><title>Apple Inc. (AAPL) Stock Price</title></head>
+<body>
+  <main>
+    <section data-testid="quote-hdr"><h1>Apple Inc. (AAPL)</h1></section>
+    <span data-testid="qsp-price">224.50</span>
+    <div class="volume-label">Volume</div>
+  </main>
+</body></html>`;

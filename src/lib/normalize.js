@@ -17,6 +17,9 @@ const CURRENCY_CODES = ['USD', 'EUR', 'GBP', 'JPY', 'INR', 'CAD', 'AUD', 'CHF', 
 
 const MAGNITUDES = { k: 1e3, m: 1e6, b: 1e9, t: 1e12 };
 
+/** One percentage reading, with optional accounting parentheses and sign. */
+const PERCENT_READING = /\(?\s*[-+−]?\s*\d[\d.,]*\s*%\s*\)?/g;
+
 /** Collapses whitespace and strips zero-width/non-breaking characters. */
 export function cleanText(input) {
   if (typeof input !== 'string') return '';
@@ -163,11 +166,48 @@ export function normalizeNews(items, limit = 5) {
 }
 
 /**
+ * Sanity check that a scraped string is the *kind* of value the field expects.
+ *
+ * The parsers are deliberately forgiving — `parseVolume("$182.44")` happily
+ * returns 182 — so a selector pointed at the wrong node yields a number that
+ * looks fine downstream. This is the guard that keeps a price out of the
+ * volume field, and it is what a healed selector must satisfy before it is
+ * trusted and persisted.
+ */
+export function valueFitsField(field, input) {
+  const text = cleanText(input);
+  if (!text) return false;
+  switch (field) {
+    case 'ticker':
+      return parseTicker(text) !== null;
+    case 'price': {
+      if (parsePrice(text) === null) return false;
+      // Strip percentage readings — "(+1.80%)" is a change, not a price — and
+      // require a number to survive. "182.44 (+1.80%)" still qualifies.
+      return /\d/.test(text.replace(PERCENT_READING, ' '));
+    }
+    case 'change_percentage':
+      return parseChangePercentage(text) !== null;
+    case 'volume':
+      // Share counts carry neither a percent sign nor a currency marker.
+      if (/%/.test(text)) return false;
+      if (detectCurrency(text) !== null) return false;
+      return parseVolume(text) !== null;
+    case 'news':
+      return true;
+    default:
+      return true;
+  }
+}
+
+/**
  * Builds the canonical scraping payload stored in `chrome.storage.local`.
  * `raw` carries the strings the content script pulled out of the DOM.
  */
 export function buildSnapshot(raw, meta = {}) {
-  const price = parsePrice(raw.price);
+  // Only parse a field when the raw text is the right shape for it, so a
+  // mis-aimed selector drops the field instead of inventing a value.
+  const price = valueFitsField('price', raw.price) ? parsePrice(raw.price) : null;
   const change = parseChangePercentage(raw.change_percentage);
   const ticker = parseTicker(raw.ticker) || tickerFromUrl(meta.source_url);
   return {
@@ -176,7 +216,7 @@ export function buildSnapshot(raw, meta = {}) {
     currency: (price && price.currency) || meta.currency || 'USD',
     change_percentage: change ? change.text : null,
     change_value: change ? change.value : null,
-    volume: parseVolume(raw.volume),
+    volume: valueFitsField('volume', raw.volume) ? parseVolume(raw.volume) : null,
     news: normalizeNews(raw.news),
     extracted_at: meta.extracted_at || new Date().toISOString(),
     source_url: meta.source_url || null,

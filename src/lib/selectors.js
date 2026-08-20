@@ -6,6 +6,7 @@
  */
 
 const css = (selector) => ({ selector, strategy: 'css' });
+const xpath = (selector) => ({ selector, strategy: 'xpath' });
 
 /**
  * Generic candidates. These are deliberately structural/semantic rather than
@@ -35,6 +36,10 @@ export const GENERIC_SELECTORS = {
     css('[data-field="regularMarketVolume"]'),
     css('[data-testid*="volume" i]'),
     css('[class*="volume" i]'),
+    // Quote pages overwhelmingly render volume as a "Volume" label followed by
+    // the value. That shape outlives the class names around it.
+    xpath('//td[normalize-space(.)="Volume"]/following-sibling::td[1]'),
+    xpath('//*[normalize-space(text())="Volume"]/following-sibling::*[1]'),
   ],
   news: [
     css('[data-testid*="storyitem" i] h3'),
@@ -56,7 +61,13 @@ export const DEFAULT_REGISTRY = {
     news: [css('[data-testid="storyitem"] h3'), css('section[data-testid="recent-news"] a h3')],
   },
   'www.google.com': {
-    ticker: [css('[data-attrid="Symbol"]'), css('c-wiz h1')],
+    // No `c-wiz h1` here: on Google Finance that heading is the site name
+    // ("Finance"), not the instrument. The ticker comes from the URL instead.
+    ticker: [css('[data-attrid="Symbol"]')],
+    // Google Finance Beta rewrote this page: the old hooks are gone and the
+    // remaining ones (`[jsname=...]`) match the market-summary tiles at the top
+    // of the page, so they return an index level instead of the instrument.
+    // A wrong price is worse than none — this field is left to healing.
     price: [css('[data-last-price]'), css('.YMlKec.fxKbKc')],
     change_percentage: [css('.JwB6zf'), css('[data-percent-change]')],
     volume: [css('[data-metric="volume"]')],

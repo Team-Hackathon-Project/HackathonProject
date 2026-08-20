@@ -21,6 +21,7 @@
   const MSG = {
     EXTRACT: 'EXTRACT',
     VALIDATE_SELECTOR: 'VALIDATE_SELECTOR',
+    CAPTURE_CONTAINER: 'CAPTURE_CONTAINER',
     PING: 'PING',
   };
 
@@ -222,6 +223,20 @@
     };
   }
 
+  /**
+   * Hands back the container for one field on request. The worker asks for
+   * this when a selector matched but produced the wrong kind of value, so the
+   * repair path gets the same context a plain miss would have given it.
+   */
+  function handleCapture(payload) {
+    const field = payload && payload.field;
+    const limit = (payload && payload.snippetLimit) || 20000;
+    if (!field) return { ok: false, error: 'no field supplied' };
+    const snippet = snippetFor(field, limit);
+    if (!snippet) return { ok: false, error: 'no container found for this field' };
+    return { ok: true, snippet };
+  }
+
   function handleValidate(payload) {
     const field = payload && payload.field;
     const entry = { selector: payload && payload.selector, strategy: payload && payload.strategy };
@@ -258,6 +273,10 @@
         sendResponse(handleValidate(message.payload));
         return undefined;
       }
+      if (message.type === MSG.CAPTURE_CONTAINER) {
+        sendResponse(handleCapture(message.payload));
+        return undefined;
+      }
     } catch (error) {
       sendResponse({ ok: false, error: String((error && error.message) || error) });
     }
@@ -265,5 +284,5 @@
   });
 
   // Exposed only so the offline test harness can drive the same code paths.
-  window[FLAG] = { handleExtract, handleValidate, snippetFor, extractField };
+  window[FLAG] = { handleExtract, handleValidate, handleCapture, snippetFor, extractField };
 })();
