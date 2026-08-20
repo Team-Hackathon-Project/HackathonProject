@@ -326,9 +326,12 @@ test('the message router answers every documented request type', async () => {
 
   const state = await background.handleRequest({ type: MSG.GET_STATE });
   assert.equal(state.decisions.length, 1);
-  assert.equal(state.settings.model, 'claude-opus-5');
+  assert.equal(state.provider, 'anthropic');
+  assert.equal(state.model, 'claude-opus-5');
+  assert.equal(state.settings.providers, undefined, 'GET_STATE must not hand provider credentials to the popup');
   assert.ok(state.registry['a.com']);
   assert.equal('apiKey' in state.settings, false, 'GET_STATE must not hand the key to the popup');
+  assert.doesNotMatch(JSON.stringify(state.settings), /sk-ant|gsk_/, 'no credential may appear anywhere in the state');
   assert.equal(state.hasApiKey, false);
 
   const reset = await background.handleRequest({ type: MSG.RESET_SELECTORS });

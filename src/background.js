@@ -14,8 +14,9 @@ import {
 } from './lib/constants.js';
 import { candidatesFor, isPlausibleSelector } from './lib/selectors.js';
 import { buildSnapshot, isUsableSnapshot, valueFitsField } from './lib/normalize.js';
+import { activeLlm, providerFor } from './lib/providers.js';
 import { heuristicAdvice, validateAdvice, buildAdvisoryContext } from './lib/advisor.js';
-import { healSelector, requestAdvice, LlmError } from './lib/llm.js';
+import { healSelector, requestAdvice, LlmError, pingProvider } from './lib/llm.js';
 import {
   getSettings, getPortfolio, getRegistry, recordHealedSelector, clearRegistry,
   saveSnapshot, getSnapshots, recordDecision, getDecisions, recordHealEvent, getHealLog,
@@ -178,7 +179,8 @@ async function buildCandidateMap(host, registry) {
  * Returns { healed, value, selector, ... } — never throws.
  */
 async function healField({ tabId, host, field, snippet, tried, settings }) {
-  const attempt = { field, host, at: new Date().toISOString(), healed: false };
+  const llm = activeLlm(settings);
+  const attempt = { field, host, at: new Date().toISOString(), healed: false, provider: llm.provider.id };
   try {
     if (!snippet) throw new Error('no container HTML captured for this field');
     const cleaned = await sanitizeSnippet(snippet, settings.maxSnippetChars);
@@ -189,8 +191,9 @@ async function healField({ tabId, host, field, snippet, tried, settings }) {
       host,
       snippet: cleaned.html,
       previousSelector: (tried || [])[0] || null,
-      model: settings.model,
-      apiKey: settings.apiKey,
+      provider: llm.provider.id,
+      model: llm.model,
+      apiKey: llm.apiKey,
     });
     attempt.proposed = proposal.selector;
     attempt.strategy = proposal.strategy;
@@ -312,7 +315,7 @@ export async function scrapeActiveTab() {
     raw[field] = null;
     delete used[field];
   }
-  if (failures.length && settings.selfHealEnabled && settings.apiKey) {
+  if (failures.length && settings.selfHealEnabled && activeLlm(settings).apiKey) {
     try {
       // Heal sequentially: each call is a separate LLM round trip and the
       // failures are usually correlated (one layout change breaks several).
@@ -339,7 +342,7 @@ export async function scrapeActiveTab() {
       await closeOffscreen();
     }
   } else if (failures.length) {
-    const reason = !settings.apiKey ? 'no API key configured' : 'self-healing is disabled in options';
+    const reason = !activeLlm(settings).apiKey ? 'no API key configured' : 'self-healing is disabled in options';
     for (const failure of failures) {
       warnings.push(failure.mismatch
         ? `Ignored "${failure.field}": the page returned "${failure.mismatch}" (${reason}).`
@@ -390,22 +393,31 @@ export async function adviseOn(snapshot) {
   const position = portfolio[snapshot.ticker] || {};
   const fallback = heuristicAdvice(snapshot, position);
 
-  if (!settings.llmAdviceEnabled || !settings.apiKey) {
+  const llm = activeLlm(settings);
+  if (!settings.llmAdviceEnabled || !llm.apiKey) {
     return {
       ...fallback,
-      note: settings.apiKey ? 'LLM advice is disabled in options.' : 'No API key configured — showing the rules-based signal.',
+      note: llm.apiKey ? 'LLM advice is disabled in options.' : 'No API key configured — showing the rules-based signal.',
     };
   }
 
   try {
     const parsed = await requestAdvice({
       context: buildAdvisoryContext(snapshot, position),
-      model: settings.model,
-      apiKey: settings.apiKey,
+      provider: llm.provider.id,
+      model: llm.model,
+      apiKey: llm.apiKey,
     });
     const advice = validateAdvice(parsed, snapshot.ticker);
     if (!advice) throw new Error('the model returned an advisory that failed schema validation');
-    return { ...advice, source: 'llm', model: settings.model, generated_at: new Date().toISOString() };
+    return {
+      ...advice,
+      source: 'llm',
+      provider: llm.provider.id,
+      provider_label: llm.provider.label,
+      model: llm.model,
+      generated_at: new Date().toISOString(),
+    };
   } catch (error) {
     const message = String((error && error.message) || error);
     console.warn('[market-scraper] LLM advice failed, using heuristic:', message);
@@ -435,9 +447,14 @@ export async function handleRequest(message) {
     }
     case MSG.GET_STATE: {
       // The popup never needs the key itself, only whether one is configured.
-      const { apiKey, ...settings } = await getSettings();
+      const stored = await getSettings();
+      const llm = activeLlm(stored);
+      const settings = { ...stored, providers: undefined };
       return {
-        hasApiKey: Boolean(apiKey),
+        hasApiKey: Boolean(llm.apiKey),
+        provider: llm.provider.id,
+        providerLabel: llm.provider.label,
+        model: llm.model,
         settings,
         portfolio: await getPortfolio(),
         snapshots: await getSnapshots(),
@@ -448,6 +465,19 @@ export async function handleRequest(message) {
     }
     case MSG.RESET_SELECTORS:
       return { registry: await clearRegistry() };
+    case MSG.TEST_PROVIDER: {
+      // Runs from the worker, with the real client — the same path a repair
+      // takes. The payload lets the options page test a key before saving it.
+      const settings = await getSettings();
+      const payload = message.payload || {};
+      const definition = providerFor(payload.provider || settings.provider);
+      const stored = (settings.providers && settings.providers[definition.id]) || {};
+      const apiKey = String(payload.apiKey || stored.apiKey || '').trim();
+      const model = String(payload.model || stored.model || '').trim() || definition.defaultModel;
+      const started = Date.now();
+      const probe = await pingProvider({ provider: definition.id, model, apiKey });
+      return { provider: definition.id, label: definition.label, model, ms: Date.now() - started, ...probe };
+    }
     default:
       throw new Error(`Unknown message type: ${message.type}`);
   }

@@ -71,11 +71,36 @@ test('saving settings persists them and clamps the snippet budget', async () => 
   await settle();
 
   const stored = (await storage.local.get(STORAGE_KEYS.SETTINGS))[STORAGE_KEYS.SETTINGS];
-  assert.equal(stored.apiKey, 'sk-ant-test');
-  assert.equal(stored.model, 'claude-haiku-4-5');
+  assert.equal(stored.provider, 'anthropic');
+  assert.equal(stored.providers.anthropic.apiKey, 'sk-ant-test');
+  assert.equal(stored.providers.anthropic.model, 'claude-haiku-4-5');
   assert.equal(stored.selfHealEnabled, false);
   assert.equal(stored.maxSnippetChars, 40000);
   assert.match(el('settings-status').textContent, /saved/i);
+});
+
+test('switching provider swaps the fields and keeps both keys', async () => {
+  const select = el('provider');
+  assert.deepEqual(Array.from(select.options).map((o) => o.value), ['anthropic', 'groq']);
+
+  select.value = 'groq';
+  select.dispatchEvent(new window.Event('change'));
+  await settle();
+
+  assert.match(el('key-label').textContent, /Groq/);
+  assert.equal(el('key-host').textContent, 'api.groq.com');
+  assert.equal(el('api-key').value, '', 'the Groq key field starts empty');
+  assert.equal(el('model').value, 'llama-3.3-70b-versatile');
+  assert.equal(el('load-models').classList.contains('hidden'), false, 'Groq can list its models');
+
+  el('api-key').value = 'gsk_test';
+  click('save-settings');
+  await settle();
+
+  const stored = (await storage.local.get(STORAGE_KEYS.SETTINGS))[STORAGE_KEYS.SETTINGS];
+  assert.equal(stored.provider, 'groq');
+  assert.equal(stored.providers.groq.apiKey, 'gsk_test');
+  assert.equal(stored.providers.anthropic.apiKey, 'sk-ant-test', 'the Anthropic key must survive the switch');
 });
 
 test('a position is normalized, saved and listed', async () => {

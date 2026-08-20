@@ -1,10 +1,11 @@
 /**
  * End-to-end run of the self-healing loop, offline and deterministic.
  *
- *   npm run e2e:heal
+ *   npm run e2e:heal            # Anthropic wire format
+ *   npm run e2e:heal -- groq    # Groq / OpenAI-compatible wire format
  *
  * Serves a quote page whose markup matches none of the shipped selectors, then
- * stubs the Anthropic endpoint *inside the service worker* so the repair runs
+ * stubs the provider endpoint *inside the service worker* so the repair runs
  * against a known answer instead of a live model and a live bill. Everything
  * else is real: the injection, the container capture, the offscreen sanitizer,
  * the in-page validation, the registry write, and the popup.
@@ -20,8 +21,9 @@ import { readFileSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
 import path from 'node:path';
 import { ROOT, stageExtension, launch, serviceWorker, popupDriver, sleep, READ_POPUP, SCAN_SETTLED } from './harness.mjs';
 
+const PROVIDER = process.argv[2] || 'anthropic';
 const PORT = Number(process.env.PORT || 8731);
-const OUT = path.join(ROOT, 'e2e', 'shots-heal');
+const OUT = path.join(ROOT, 'e2e', `shots-heal-${PROVIDER}`);
 mkdirSync(OUT, { recursive: true });
 
 const log = (...args) => console.log('[heal]', ...args);
@@ -47,31 +49,53 @@ try {
   const options = await browser.newPage();
   await options.goto(`chrome-extension://${extensionId}/src/options.html`, { waitUntil: 'load' });
   await sleep(600);
-  await options.evaluate(async () => {
+  await options.evaluate(async (provider) => {
     await chrome.storage.local.set({
-      settings: { apiKey: 'sk-ant-e2e-stub', model: 'claude-opus-5', selfHealEnabled: true, llmAdviceEnabled: true, maxSnippetChars: 12000 },
+      settings: {
+        provider,
+        providers: {
+          anthropic: { apiKey: 'sk-ant-e2e-stub', model: 'claude-opus-5' },
+          groq: { apiKey: 'gsk_e2e_stub', model: 'llama-3.3-70b-versatile' },
+        },
+        selfHealEnabled: true,
+        llmAdviceEnabled: true,
+        maxSnippetChars: 12000,
+      },
       portfolio: { NVDA: { shares: 10, cost_basis: 120, buy_below: 150, sell_above: 175 } },
     });
-  });
+  }, PROVIDER);
+  log('provider under test:', PROVIDER);
 
-  // 2. stub the Anthropic endpoint in the worker, and watch for warnings
-  await sw.evaluate(() => {
+  // 2. stub the provider endpoint in the worker, and watch for warnings
+  await sw.evaluate((provider) => {
     self.__llmCalls = [];
     self.__warns = [];
     const warn = console.warn;
     console.warn = (...args) => { self.__warns.push(args.map(String).join(' ')); warn(...args); };
 
-    const envelope = (payload) => JSON.stringify({
-      id: 'msg_e2e', type: 'message', role: 'assistant', model: 'claude-opus-5',
-      stop_reason: 'end_turn', content: [{ type: 'text', text: JSON.stringify(payload) }],
-      usage: { input_tokens: 100, output_tokens: 50 },
-    });
+    // Each provider is answered in its own wire format, so this run exercises
+    // the real parsing path rather than a single shared shape.
+    const envelope = (payload) => JSON.stringify(provider === 'groq'
+      ? {
+          id: 'chatcmpl_e2e', object: 'chat.completion', model: 'llama-3.3-70b-versatile',
+          choices: [{ index: 0, finish_reason: 'stop', message: { role: 'assistant', content: JSON.stringify(payload) } }],
+          usage: { prompt_tokens: 100, completion_tokens: 50 },
+        }
+      : {
+          id: 'msg_e2e', type: 'message', role: 'assistant', model: 'claude-opus-5',
+          stop_reason: 'end_turn', content: [{ type: 'text', text: JSON.stringify(payload) }],
+          usage: { input_tokens: 100, output_tokens: 50 },
+        });
 
     self.fetch = async (url, init) => {
       const body = init && init.body ? String(init.body) : '';
       const headers = (init && init.headers) || {};
       const kind = /"selector"/.test(body) || /selector/i.test(body) ? 'heal' : 'advice';
-      self.__llmCalls.push({ url: String(url), kind, hasKey: Boolean(headers['x-api-key']) });
+      self.__llmCalls.push({
+        url: String(url),
+        kind,
+        hasKey: Boolean(headers['x-api-key'] || headers.authorization),
+      });
       // The same node is proposed for every field on purpose: only `price` is
       // actually a price, so the other two must be rejected.
       const payload = kind === 'heal'
@@ -83,7 +107,7 @@ try {
           };
       return new Response(envelope(payload), { status: 200, headers: { 'content-type': 'application/json' } });
     };
-  });
+  }, PROVIDER);
 
   // 3. the page whose markup nothing matches
   const page = await browser.newPage();
@@ -117,6 +141,8 @@ try {
   report.worker = worker;
   log('llm calls:', worker.calls.length, '| worker warnings:', worker.warns.length ? worker.warns : 'none');
   if (worker.calls.some((call) => !call.hasKey)) fail('a request went out without the API key header');
+  const expectedHost = PROVIDER === 'groq' ? 'api.groq.com' : 'api.anthropic.com';
+  if (worker.calls.some((call) => !call.url.includes(expectedHost))) fail(`a request went somewhere other than ${expectedHost}`);
   if (worker.warns.some((w) => /offscreen sanitize failed/.test(w))) fail('the offscreen sanitizer fell back to the regex path');
   if (worker.offscreenStillOpen) fail('the offscreen document was left open after the scrape');
 

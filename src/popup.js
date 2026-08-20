@@ -133,7 +133,9 @@ function renderAdvice(advice) {
   ui.score.textContent = `${percent}% confidence`;
   ui.rationale.textContent = advice.rationale;
 
-  const origin = advice.source === 'llm' ? `Claude (${advice.model || 'model'})` : 'Local rules engine';
+  const origin = advice.source === 'llm'
+    ? `${advice.provider_label || 'Model'} (${advice.model || 'model'})`
+    : 'Local rules engine';
   ui.source.textContent = advice.note ? `${origin} — ${advice.note}` : origin;
 
   show(ui.overridePanel, false);

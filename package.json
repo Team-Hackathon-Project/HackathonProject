@@ -11,7 +11,8 @@
     "check": "npm run lint && npm test",
     "package": "node scripts/package.mjs",
     "e2e": "node e2e/quote-page.mjs",
-    "e2e:heal": "node e2e/self-healing.mjs"
+    "e2e:heal": "node e2e/self-healing.mjs",
+    "e2e:provider": "node e2e/provider-check.mjs"
   },
   "devDependencies": {
     "jsdom": "^30.0.1",

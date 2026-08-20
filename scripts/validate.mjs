@@ -9,6 +9,7 @@
 import { readFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
+import { PROVIDER_HOSTS } from '../src/lib/providers.js';
 
 const ROOT = fileURLToPath(new URL('../', import.meta.url));
 
@@ -90,8 +91,13 @@ export function validate() {
   for (const permission of permissions) {
     if (!REQUIRED_PERMISSIONS.includes(permission)) problems.push(`permission outside the documented scope: ${permission}`);
   }
-  for (const host of manifest.host_permissions || []) {
-    if (!host.startsWith('https://api.anthropic.com')) problems.push(`unexpected host permission: ${host}`);
+  // The only hosts the extension may reach are the model providers it ships.
+  const declaredHosts = manifest.host_permissions || [];
+  for (const host of declaredHosts) {
+    if (!PROVIDER_HOSTS.includes(host)) problems.push(`unexpected host permission: ${host}`);
+  }
+  for (const host of PROVIDER_HOSTS) {
+    if (!declaredHosts.includes(host)) problems.push(`missing host permission for a shipped provider: ${host}`);
   }
 
   // Every file the manifest points at must exist.

@@ -14,20 +14,26 @@
 
       <section class="card">
         <h2>Agent</h2>
-        <label for="api-key">Anthropic API key</label>
-        <input id="api-key" type="password" autocomplete="off" placeholder="sk-ant-…" />
+        <label for="provider">Model provider</label>
+        <select id="provider"></select>
+
+        <label for="api-key"><span id="key-label">API key</span></label>
+        <input id="api-key" type="password" autocomplete="off" />
         <p class="disclaimer">
           Stored in <code>chrome.storage.local</code> on this machine and sent only to
-          <code>api.anthropic.com</code> from the extension service worker. It is never exposed to the pages you visit.
-          Leave it empty to run fully offline: no self-healing, and advice comes from the local rules engine.
+          <code id="key-host">the provider</code> from the extension service worker. It is never exposed to the pages
+          you visit. Keys are kept per provider, so switching does not discard the other one. Leave it empty to run
+          fully offline: no self-healing, and advice comes from the local rules engine.
         </p>
 
         <label for="model">Model</label>
-        <select id="model">
-          <option value="claude-opus-5">claude-opus-5 (default)</option>
-          <option value="claude-sonnet-5">claude-sonnet-5</option>
-          <option value="claude-haiku-4-5">claude-haiku-4-5</option>
-        </select>
+        <input id="model" type="text" list="model-list" autocomplete="off" spellcheck="false" />
+        <datalist id="model-list"></datalist>
+        <div class="button-row">
+          <button id="load-models" class="ghost small hidden" type="button">Load models from provider</button>
+          <button id="test-provider" class="ghost small" type="button">Test connection</button>
+        </div>
+        <p id="model-status" class="status" role="status" aria-live="polite"></p>
 
         <label class="checkbox"><input id="self-heal" type="checkbox" /> Repair broken selectors with the LLM</label>
         <label class="checkbox"><input id="llm-advice" type="checkbox" /> Use the LLM for advisories (otherwise local rules only)</label>

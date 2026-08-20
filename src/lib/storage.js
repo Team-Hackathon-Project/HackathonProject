@@ -20,13 +20,36 @@ export async function setRaw(items) {
   return area().set(items);
 }
 
+/**
+ * Merges stored settings over the defaults, one level deep for `providers` so
+ * a stored Groq key does not wipe the Anthropic defaults (or vice versa).
+ *
+ * Settings written before providers existed carried a bare `apiKey`/`model`
+ * pair; those belonged to Anthropic, so they are folded in here.
+ */
 export async function getSettings() {
-  const stored = await getRaw(STORAGE_KEYS.SETTINGS);
-  return { ...DEFAULT_SETTINGS, ...(stored[STORAGE_KEYS.SETTINGS] || {}) };
+  const stored = (await getRaw(STORAGE_KEYS.SETTINGS))[STORAGE_KEYS.SETTINGS] || {};
+  const providers = {};
+  for (const [id, defaults] of Object.entries(DEFAULT_SETTINGS.providers)) {
+    providers[id] = { ...defaults, ...((stored.providers || {})[id] || {}) };
+  }
+  if (stored.apiKey && !((stored.providers || {}).anthropic || {}).apiKey) {
+    providers.anthropic.apiKey = stored.apiKey;
+  }
+  if (stored.model && !((stored.providers || {}).anthropic || {}).model) {
+    providers.anthropic.model = stored.model;
+  }
+  const { apiKey, model, ...rest } = stored;
+  return { ...DEFAULT_SETTINGS, ...rest, providers };
 }
 
 export async function saveSettings(patch) {
-  const next = { ...(await getSettings()), ...patch };
+  const current = await getSettings();
+  const providers = { ...current.providers };
+  for (const [id, values] of Object.entries(patch.providers || {})) {
+    providers[id] = { ...(providers[id] || {}), ...values };
+  }
+  const next = { ...current, ...patch, providers };
   await setRaw({ [STORAGE_KEYS.SETTINGS]: next });
   return next;
 }

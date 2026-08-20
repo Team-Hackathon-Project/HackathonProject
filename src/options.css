@@ -78,3 +78,27 @@ body.options .reject.small {
 }
 body.options .primary.small { align-self: flex-start; }
 body.options code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; }
+
+/* Secondary actions next to the model field: readable, but clearly not the
+   primary "Save settings" call. */
+body.options .button-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 6px 0 2px;
+}
+
+body.options .ghost {
+  width: auto;
+  padding: 7px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+}
+
+body.options .ghost:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}

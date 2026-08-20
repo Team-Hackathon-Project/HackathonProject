@@ -18,7 +18,12 @@ Then in Chrome: `chrome://extensions` → enable **Developer mode** → **Load u
 MarketWatch, stockanalysis.com, or anything else), click the toolbar icon, and
 press **Scan this tab**.
 
-Optionally open the extension's options page and paste an Anthropic API key.
+Optionally open the extension's options page and paste an API key. Two
+providers ship: **Anthropic (Claude)** by default, and **Groq** for when an
+Anthropic key is not available — Groq's free tier runs the whole loop. Pick one
+in the dropdown, paste its key, and press **Test connection** to confirm it
+before you rely on it. Keys are stored per provider, so switching does not
+discard the other one.
 Without a key everything still works: no self-healing, and advisories come from
 the local rules engine.
 
@@ -40,7 +45,8 @@ src/
     sanitize.js            HTML sanitizer used by the offscreen document
     advisor.js             Deterministic rules engine + advisory schema validation
     storage.js             Typed chrome.storage.local accessors
-    llm.js                 Anthropic Messages API client (raw fetch, structured outputs)
+    llm.js                 Provider-agnostic client: structured output, retries, timeouts
+    providers.js           Anthropic and Groq wire formats, and the active-provider resolver
 scripts/
   validate.mjs             Static bundle validation (npm run lint)
   make-icons.mjs           Dependency-free PNG icon generator
@@ -51,7 +57,8 @@ e2e/
   self-healing.mjs         Deterministic repair run against a mangled page
 docs/
   DEMO.md                  Three-minute demo script, with real screenshots
-test/                      129 tests: node:test + jsdom
+  provider-check.mjs       Confirms a provider answers from the service worker
+test/                      139 tests: node:test + jsdom
 ```
 
 ## How the self-healing loop works
@@ -118,11 +125,12 @@ Advisory output:
 ## Security and privacy notes
 
 - **Permissions are exactly** `activeTab`, `storage`, `scripting`, `offscreen`,
-  plus one host permission for `https://api.anthropic.com/*`. There are no
+  plus host permissions for `https://api.anthropic.com/*` and
+  `https://api.groq.com/*` — the two model providers, and nothing else. There are no
   declared content scripts, so the extension has no standing access to any site;
   it can only read a tab after you click the toolbar icon.
 - **The API key lives in the service worker.** It is stored in
-  `chrome.storage.local`, sent only to `api.anthropic.com`, and is never exposed
+  `chrome.storage.local`, sent only to the selected provider's host, and is never exposed
   to the content script or included in the popup's state (`GET_STATE` returns
   `hasApiKey`, not the key).
 - **Scraped text is never treated as markup.** The popup renders everything with
@@ -134,10 +142,11 @@ Advisory output:
 ## Commands
 
 ```bash
-npm run check     # static validation + the full test suite (129 tests)
+npm run check     # static validation + the full test suite (139 tests)
 npm run package   # dist/self-healing-market-scraper-<version>.zip
 npm run e2e       # drive the real extension in a real browser, live site
 npm run e2e:heal  # drive the repair loop against a mangled page, offline
+npm run e2e:provider -- groq gsk_…   # does this key and model actually answer?
 ```
 
 `npm run lint` alone runs `scripts/validate.mjs`, which catches the failures
@@ -154,6 +163,32 @@ screenshots to `e2e/shots/`. Both e2e scripts run from a throwaway copy of the
 extension with `host_permissions` widened for the site under test: `activeTab`
 is only granted by a human clicking the toolbar icon, and no automation protocol
 can produce that click. The shipped manifest keeps its narrow permission set.
+
+## Choosing a provider
+
+The reasoning work — repair a selector, write an advisory — is the same request
+in both cases: a system prompt, one user message, and a JSON schema the answer
+must satisfy. Only the wire format differs, so each provider in
+[`src/lib/providers.js`](src/lib/providers.js) owns exactly four things: its auth
+headers, its request body, how to pull the JSON back out, and where its error
+message lives.
+
+| | Anthropic | Groq |
+| --- | --- | --- |
+| Endpoint | `/v1/messages` | `/openai/v1/chat/completions` |
+| Auth | `x-api-key` | `Authorization: Bearer` |
+| Schema enforcement | `output_config.format` | `response_format.json_schema` |
+| Model list in options | fixed | **Load models from provider** reads the live catalogue |
+
+Not every model behind an OpenAI-compatible endpoint supports strict
+`json_schema`. When one rejects it, the client retries the same request once
+with the schema moved into the prompt, so a model that only does `json_object`
+still works. Answers wrapped in a code fence or a sentence of prose are parsed
+too, because smaller models do that.
+
+Both endpoints have been confirmed reachable from the MV3 service worker
+(`npm run e2e:provider`), and the full repair loop has been driven end to end in
+both wire formats (`npm run e2e:heal`, `npm run e2e:heal -- groq`).
 
 ## What has been verified in a real browser
 
@@ -188,6 +223,11 @@ extension to read a tab you have not handed it.
 - The popup is `popup.js`, not `popup.jsx`. The extension ships with **no build
   step and no runtime dependencies** — you load the folder directly. Adding JSX
   would mean adding a bundler between the source and what Chrome runs.
+- `host_permissions` includes `https://api.groq.com/*` alongside
+  `https://api.anthropic.com/*`. The spec named Claude, and Claude is still the
+  default; Groq is there so the project can be run and demonstrated by someone
+  who cannot get an Anthropic key. The prompts, schemas, validation and refusal
+  logic are identical either way — only the wire format differs.
 - `host_permissions` includes `https://api.anthropic.com/*`, which the original
   permission list did not mention. Calling the API from the service worker
   requires it.

@@ -14,6 +14,7 @@ export const MSG = {
   RECORD_DECISION: 'RECORD_DECISION',
   GET_STATE: 'GET_STATE',
   RESET_SELECTORS: 'RESET_SELECTORS',
+  TEST_PROVIDER: 'TEST_PROVIDER',
   // content -> background
   SELECTOR_FAILED: 'SELECTOR_FAILED',
   // background -> content
@@ -42,16 +43,21 @@ export const FIELDS = ['ticker', 'price', 'change_percentage', 'volume', 'news']
 /** Fields that must be present for a snapshot to be considered usable. */
 export const REQUIRED_FIELDS = ['ticker', 'price'];
 
+/**
+ * Credentials are held per provider so switching between them does not throw a
+ * key away. `provider` selects which of them is in force; `activeLlm()` in
+ * `providers.js` resolves the pair.
+ */
 export const DEFAULT_SETTINGS = {
-  apiKey: '',
-  model: 'claude-opus-5',
+  provider: 'anthropic',
+  providers: {
+    anthropic: { apiKey: '', model: 'claude-opus-5' },
+    groq: { apiKey: '', model: 'llama-3.3-70b-versatile' },
+  },
   selfHealEnabled: true,
   llmAdviceEnabled: true,
   maxSnippetChars: 12000,
 };
-
-export const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages';
-export const ANTHROPIC_VERSION = '2023-06-01';
 
 /** Max characters of raw container HTML the content script hands to the healer. */
 export const SNIPPET_LIMIT = 20000;

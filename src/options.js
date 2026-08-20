@@ -8,6 +8,8 @@
  */
 import { MSG } from './lib/constants.js';
 import { getSettings, saveSettings, getPortfolio, savePosition, getRegistry, getHealLog } from './lib/storage.js';
+import { PROVIDERS, providerFor } from './lib/providers.js';
+import { listModels } from './lib/llm.js';
 
 const el = (id) => document.getElementById(id);
 
@@ -22,13 +24,59 @@ function numberOrNull(value) {
   return value === '' || !Number.isFinite(parsed) ? null : parsed;
 }
 
+/**
+ * The provider fields are edited in memory and only written on save, so
+ * switching the dropdown to compare two providers does not persist anything.
+ */
+let draft = null;
+
+function renderProviderFields(id) {
+  const provider = providerFor(id);
+  const values = draft.providers[provider.id] || {};
+  el('key-label').textContent = `${provider.label} API key`;
+  el('key-host').textContent = provider.host;
+  el('api-key').placeholder = provider.keyPlaceholder;
+  el('api-key').value = values.apiKey || '';
+  el('model').value = values.model || provider.defaultModel;
+  el('model').placeholder = provider.defaultModel;
+  el('load-models').classList.toggle('hidden', !provider.modelsUrl);
+
+  const list = el('model-list');
+  list.replaceChildren();
+  for (const model of provider.models) {
+    const option = document.createElement('option');
+    option.value = model;
+    list.appendChild(option);
+  }
+  el('model-status').textContent = '';
+}
+
+/** Copies whatever is on screen back into the draft for the given provider. */
+function captureProviderFields(id) {
+  draft.providers[id] = {
+    ...(draft.providers[id] || {}),
+    apiKey: el('api-key').value.trim(),
+    model: el('model').value.trim() || providerFor(id).defaultModel,
+  };
+}
+
 async function renderSettings() {
-  const settings = await getSettings();
-  el('api-key').value = settings.apiKey || '';
-  el('model').value = settings.model;
-  el('self-heal').checked = settings.selfHealEnabled;
-  el('llm-advice').checked = settings.llmAdviceEnabled;
-  el('snippet-chars').value = settings.maxSnippetChars;
+  draft = await getSettings();
+
+  const select = el('provider');
+  select.replaceChildren();
+  for (const provider of Object.values(PROVIDERS)) {
+    const option = document.createElement('option');
+    option.value = provider.id;
+    option.textContent = provider.label;
+    select.appendChild(option);
+  }
+  select.value = providerFor(draft.provider).id;
+
+  renderProviderFields(select.value);
+  el('self-heal').checked = draft.selfHealEnabled;
+  el('llm-advice').checked = draft.llmAdviceEnabled;
+  el('snippet-chars').value = draft.maxSnippetChars;
 }
 
 async function renderPortfolio() {
@@ -111,16 +159,75 @@ async function renderHealLog() {
   }
 }
 
+let shownProvider = null;
+el('provider').addEventListener('change', () => {
+  if (shownProvider) captureProviderFields(shownProvider);
+  shownProvider = el('provider').value;
+  renderProviderFields(shownProvider);
+});
+
+el('load-models').addEventListener('click', async () => {
+  const id = el('provider').value;
+  const apiKey = el('api-key').value.trim();
+  if (!apiKey) {
+    setStatus(el('model-status'), 'Enter the API key first, then load the list.', true);
+    return;
+  }
+  setStatus(el('model-status'), 'Loading…');
+  try {
+    const models = await listModels({ provider: id, apiKey });
+    if (!models || !models.length) {
+      setStatus(el('model-status'), 'The provider returned no models.', true);
+      return;
+    }
+    const list = el('model-list');
+    list.replaceChildren();
+    for (const model of models) {
+      const option = document.createElement('option');
+      option.value = model;
+      list.appendChild(option);
+    }
+    setStatus(el('model-status'), `${models.length} models available — pick one from the field above.`);
+  } catch (error) {
+    setStatus(el('model-status'), String((error && error.message) || error), true);
+  }
+});
+
+el('test-provider').addEventListener('click', async () => {
+  const id = el('provider').value;
+  const apiKey = el('api-key').value.trim();
+  if (!apiKey) {
+    setStatus(el('model-status'), 'Enter the API key first.', true);
+    return;
+  }
+  setStatus(el('model-status'), 'Testing…');
+  // Goes through the service worker on purpose: that is where real calls are
+  // made, so this proves the path the extension actually uses.
+  const response = await chrome.runtime.sendMessage({
+    type: MSG.TEST_PROVIDER,
+    payload: { provider: id, apiKey, model: el('model').value.trim() },
+  });
+  if (response && response.ok) {
+    const { label, model, ms, note } = response.data;
+    setStatus(el('model-status'), `${label} answered as ${model} in ${ms} ms${note ? ` — “${note}”` : ''}.`);
+  } else {
+    setStatus(el('model-status'), (response && response.error) || 'The provider could not be reached.', true);
+  }
+});
+
 el('save-settings').addEventListener('click', async () => {
   const chars = Number(el('snippet-chars').value);
+  const id = el('provider').value;
+  captureProviderFields(id);
   await saveSettings({
-    apiKey: el('api-key').value.trim(),
-    model: el('model').value,
+    provider: id,
+    providers: draft.providers,
     selfHealEnabled: el('self-heal').checked,
     llmAdviceEnabled: el('llm-advice').checked,
     maxSnippetChars: Number.isFinite(chars) ? Math.min(40000, Math.max(1000, chars)) : 12000,
   });
   await renderSettings();
+  shownProvider = el('provider').value;
   setStatus(el('settings-status'), 'Settings saved.');
 });
 
@@ -148,4 +255,5 @@ el('reset-registry').addEventListener('click', async () => {
 
 (async function init() {
   await Promise.all([renderSettings(), renderPortfolio(), renderRegistry(), renderHealLog()]);
+  shownProvider = el('provider').value;
 })();

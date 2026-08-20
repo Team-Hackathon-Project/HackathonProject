@@ -12,7 +12,7 @@ test('the bundle passes static validation', () => {
 
 test('the manifest keeps the documented permission scope', () => {
   assert.deepEqual(manifest.permissions.sort(), ['activeTab', 'offscreen', 'scripting', 'storage']);
-  assert.deepEqual(manifest.host_permissions, ['https://api.anthropic.com/*']);
+  assert.deepEqual(manifest.host_permissions, ['https://api.anthropic.com/*', 'https://api.groq.com/*']);
   assert.equal(manifest.manifest_version, 3);
   assert.equal(manifest.background.type, 'module');
   assert.equal(manifest.content_scripts, undefined);
@@ -51,5 +51,5 @@ test('scraped values are never written into the DOM as HTML', () => {
 test('the API key is only ever read in the service-worker side of the extension', () => {
   const popup = readSource('src/popup.js');
   assert.doesNotMatch(popup, /apiKey/, 'the popup must not touch the API key');
-  assert.doesNotMatch(readSource('src/content.js'), /apiKey|api\.anthropic\.com/, 'the content script must never see credentials');
+  assert.doesNotMatch(readSource('src/content.js'), /apiKey|api\.anthropic\.com|api\.groq\.com/, 'the content script must never see credentials');
 });

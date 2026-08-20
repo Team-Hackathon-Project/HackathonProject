@@ -31,6 +31,7 @@ const ADVICE = {
   user_action_required: true,
   source: 'llm',
   model: 'claude-opus-5',
+  provider_label: 'Anthropic (Claude)',
 };
 
 const sent = [];
@@ -95,7 +96,7 @@ test('scanning renders the snapshot and the advisory card', async () => {
   assert.equal(el('advice-bar').style.width, '72%');
   assert.equal(el('advice-score').textContent, '72% confidence');
   assert.match(el('advice-rationale').textContent, /sell target/);
-  assert.match(el('advice-source').textContent, /Claude/);
+  assert.match(el('advice-source').textContent, /Anthropic \(Claude\)/);
   assert.equal(el('advice-card').classList.contains('hidden'), false);
 });
 

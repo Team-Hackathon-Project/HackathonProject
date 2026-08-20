@@ -1,12 +1,16 @@
 /**
- * Anthropic Messages API client.
+ * Provider-agnostic LLM client.
  *
- * Raw `fetch` rather than the official SDK: this runs inside an MV3 service
+ * Raw `fetch` rather than an official SDK: this runs inside an MV3 service
  * worker with no bundler step, and MV3's CSP forbids loading remote code.
  * Requests go out from the service worker (never the content script) so the
  * API key never touches a page context.
+ *
+ * The wire format lives in `providers.js`; everything here is about the two
+ * jobs the extension actually needs — repair a selector, write an advisory —
+ * plus timeouts, error classification, and the structured-output retry.
  */
-import { ANTHROPIC_URL, ANTHROPIC_VERSION } from './constants.js';
+import { providerFor } from './providers.js';
 
 /** Structured-output schema for a healed selector. */
 const SELECTOR_SCHEMA = {
@@ -49,26 +53,21 @@ export class LlmError extends Error {
 }
 
 /**
- * POSTs one non-streaming request to /v1/messages and returns the parsed body.
+ * POSTs one non-streaming request and returns the parsed body.
  * `fetchImpl` is injectable so the transport can be tested without a network.
  */
-export async function callMessages(body, { apiKey, timeoutMs = 45000, fetchImpl = globalThis.fetch } = {}) {
-  if (!apiKey) throw new LlmError('No Anthropic API key configured. Add one in the extension options.');
+export async function callModel(body, { provider, apiKey, timeoutMs = 45000, fetchImpl = globalThis.fetch } = {}) {
+  const definition = providerFor(provider);
+  if (!apiKey) {
+    throw new LlmError(`No ${definition.label} API key configured. Add one in the extension options.`);
+  }
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   let response;
   try {
-    response = await fetchImpl(ANTHROPIC_URL, {
+    response = await fetchImpl(definition.endpoint, {
       method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': ANTHROPIC_VERSION,
-        // Required for calls made from a browser/extension context.
-        'anthropic-dangerous-direct-browser-access': 'true',
-        // Server-side refusal fallback (see `fallbacks` in buildRequest).
-        'anthropic-beta': 'server-side-fallback-2026-07-01',
-      },
+      headers: definition.headers(apiKey),
       body: JSON.stringify(body),
       signal: controller.signal,
     });
@@ -91,52 +90,53 @@ export async function callMessages(body, { apiKey, timeoutMs = 45000, fetchImpl 
   }
 
   if (!response.ok) {
-    const detail = (parsed && parsed.error && parsed.error.message) || text.slice(0, 300) || response.statusText;
-    throw new LlmError(`Anthropic API ${response.status}: ${detail}`, {
+    const detail = definition.errorDetail(parsed) || text.slice(0, 300) || response.statusText;
+    throw new LlmError(`${definition.label} API ${response.status}: ${detail}`, {
       status: response.status,
       retryable: response.status === 429 || response.status >= 500 || response.status === 408,
     });
   }
-  if (!parsed) throw new LlmError('Anthropic API returned a non-JSON body', { status: response.status });
+  if (!parsed) throw new LlmError(`${definition.label} API returned a non-JSON body`, { status: response.status });
   return parsed;
 }
 
-/** Wraps a request in the shared defaults (model, fallbacks, effort). */
-function buildRequest({ model, maxTokens, system, userContent, schema, effort }) {
-  return {
-    model: model || 'claude-opus-5',
-    max_tokens: maxTokens,
-    system,
-    // Opus 5 may decline a request outright; `fallbacks: "default"` lets the
-    // API rescue the call on another model inside the same request.
-    fallbacks: 'default',
-    output_config: {
-      effort,
-      format: { type: 'json_schema', schema },
-    },
-    messages: [{ role: 'user', content: userContent }],
-  };
+/** Pulls the JSON object out of a response, in that provider's shape. */
+export function extractStructuredJson(response, provider) {
+  const definition = providerFor(provider);
+  if (!response) throw new LlmError('Empty response from the model API');
+  const { value, error } = definition.extractJson(response);
+  if (error) throw new LlmError(error);
+  return value;
 }
 
 /**
- * Pulls the JSON object out of a Messages response.
- * `output_config.format` guarantees the first text block is valid JSON, but we
- * still parse defensively — a refusal returns no usable text at all.
+ * One schema-constrained round trip.
+ *
+ * Not every model behind an OpenAI-compatible endpoint supports strict
+ * `json_schema`. When the API rejects it, the request is rebuilt once with the
+ * schema moved into the prompt instead of enforced by the server.
  */
-export function extractStructuredJson(response) {
-  if (!response) throw new LlmError('Empty response from Anthropic API');
-  if (response.stop_reason === 'refusal') {
-    const detail = (response.stop_details && response.stop_details.category) || 'unspecified';
-    throw new LlmError(`Model declined the request (category: ${detail})`);
+async function runStructured({
+  provider, model, apiKey, maxTokens, system, userContent, schema, schemaName, effort, fetchImpl, timeoutMs,
+}) {
+  const definition = providerFor(provider);
+  let plain = false;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const body = definition.buildRequest({ model, maxTokens, system, userContent, schema, schemaName, effort, plain });
+    let response;
+    try {
+      response = await callModel(body, { provider: definition.id, apiKey, fetchImpl, timeoutMs });
+    } catch (error) {
+      const canRetry = !plain
+        && typeof definition.needsPlainJson === 'function'
+        && definition.needsPlainJson(error.status, error.message);
+      if (!canRetry) throw error;
+      plain = true;
+      continue;
+    }
+    return extractStructuredJson(response, definition.id);
   }
-  const blocks = Array.isArray(response.content) ? response.content : [];
-  const textBlock = blocks.find((block) => block && block.type === 'text' && typeof block.text === 'string');
-  if (!textBlock) throw new LlmError('Response contained no text block to parse');
-  try {
-    return JSON.parse(textBlock.text);
-  } catch (error) {
-    throw new LlmError(`Response was not valid JSON: ${textBlock.text.slice(0, 200)}`, { cause: error });
-  }
+  throw new LlmError(`${definition.label} rejected both the strict and the plain JSON request formats`);
 }
 
 const HEAL_SYSTEM = [
@@ -153,7 +153,7 @@ const HEAL_SYSTEM = [
  * Asks the model for a replacement selector for one broken field.
  * Returns { selector, strategy, confidence, reason }.
  */
-export async function healSelector({ field, host, snippet, previousSelector, model, apiKey, fetchImpl, timeoutMs }) {
+export async function healSelector({ field, host, snippet, previousSelector, provider, model, apiKey, fetchImpl, timeoutMs }) {
   const userContent = [
     `Host: ${host}`,
     `Metric that failed: ${field}`,
@@ -165,18 +165,20 @@ export async function healSelector({ field, host, snippet, previousSelector, mod
     '```',
   ].join('\n');
 
-  const response = await callMessages(
-    buildRequest({
-      model,
-      maxTokens: 4096,
-      system: HEAL_SYSTEM,
-      userContent,
-      schema: SELECTOR_SCHEMA,
-      effort: 'medium',
-    }),
-    { apiKey, fetchImpl, timeoutMs }
-  );
-  const parsed = extractStructuredJson(response);
+  const parsed = await runStructured({
+    provider,
+    model,
+    apiKey,
+    maxTokens: 4096,
+    system: HEAL_SYSTEM,
+    userContent,
+    schema: SELECTOR_SCHEMA,
+    schemaName: 'healed_selector',
+    effort: 'medium',
+    fetchImpl,
+    timeoutMs,
+  });
+
   return {
     selector: typeof parsed.selector === 'string' ? parsed.selector.trim() : '',
     strategy: parsed.strategy === 'xpath' ? 'xpath' : 'css',
@@ -198,7 +200,7 @@ const ADVICE_SYSTEM = [
 ].join(' ');
 
 /** Asks the model for a BUY/SELL/HOLD advisory. Returns the raw parsed object. */
-export async function requestAdvice({ context, model, apiKey, fetchImpl, timeoutMs }) {
+export async function requestAdvice({ context, provider, model, apiKey, fetchImpl, timeoutMs }) {
   const userContent = [
     'Live snapshot and user portfolio context (JSON):',
     '```json',
@@ -207,16 +209,86 @@ export async function requestAdvice({ context, model, apiKey, fetchImpl, timeout
     'Produce the advisory for this ticker.',
   ].join('\n');
 
-  const response = await callMessages(
-    buildRequest({
-      model,
-      maxTokens: 8192,
-      system: ADVICE_SYSTEM,
-      userContent,
-      schema: ADVICE_SCHEMA,
-      effort: 'medium',
-    }),
-    { apiKey, fetchImpl, timeoutMs }
-  );
-  return extractStructuredJson(response);
+  return runStructured({
+    provider,
+    model,
+    apiKey,
+    maxTokens: 8192,
+    system: ADVICE_SYSTEM,
+    userContent,
+    schema: ADVICE_SCHEMA,
+    schemaName: 'advisory',
+    effort: 'medium',
+    fetchImpl,
+    timeoutMs,
+  });
+}
+
+/** Smallest possible schema-constrained request, used to verify a key. */
+const PROBE_SCHEMA = {
+  type: 'object',
+  properties: { ok: { type: 'boolean' }, note: { type: 'string' } },
+  required: ['ok', 'note'],
+  additionalProperties: false,
+};
+
+/**
+ * Sends one tiny structured request so a user can confirm a key and a model
+ * work before relying on them mid-demo. Throws `LlmError` on any failure, so
+ * the caller gets the provider's own message rather than a generic one.
+ */
+export async function pingProvider({ provider, model, apiKey, fetchImpl, timeoutMs = 20000 }) {
+  const parsed = await runStructured({
+    provider,
+    model,
+    apiKey,
+    maxTokens: 256,
+    system: 'You are a connectivity probe for a browser extension. Answer with ok=true and a short note naming the model answering.',
+    userContent: 'Reply now.',
+    schema: PROBE_SCHEMA,
+    schemaName: 'probe',
+    effort: 'low',
+    fetchImpl,
+    timeoutMs,
+  });
+  return { ok: parsed.ok === true, note: typeof parsed.note === 'string' ? parsed.note : '' };
+}
+
+/**
+ * Lists the models the key can actually use. Only providers that expose a
+ * catalogue (Groq) support this; it is what keeps the options page from
+ * offering a model id the provider has since retired.
+ */
+export async function listModels({ provider, apiKey, fetchImpl = globalThis.fetch, timeoutMs = 15000 }) {
+  const definition = providerFor(provider);
+  if (!definition.modelsUrl) return null;
+  if (!apiKey) throw new LlmError(`No ${definition.label} API key configured.`);
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  let response;
+  try {
+    response = await fetchImpl(definition.modelsUrl, { headers: definition.headers(apiKey), signal: controller.signal });
+  } catch (error) {
+    throw new LlmError(`Network error: ${error.message}`, { retryable: true, cause: error });
+  } finally {
+    clearTimeout(timer);
+  }
+
+  const text = await response.text();
+  let parsed = null;
+  try {
+    parsed = text ? JSON.parse(text) : null;
+  } catch {
+    parsed = null;
+  }
+  if (!response.ok) {
+    throw new LlmError(`${definition.label} API ${response.status}: ${definition.errorDetail(parsed) || response.statusText}`, {
+      status: response.status,
+    });
+  }
+  const rows = (parsed && Array.isArray(parsed.data) ? parsed.data : [])
+    .map((row) => row && row.id)
+    .filter((id) => typeof id === 'string');
+  return rows.sort();
 }

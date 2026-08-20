@@ -4,8 +4,16 @@
   "version": "1.0.0",
   "description": "Scrapes live market data from the active tab, self-heals broken DOM selectors with an LLM, and proposes BUY/SELL/HOLD with rationale. You always decide.",
   "minimum_chrome_version": "116",
-  "permissions": ["activeTab", "storage", "scripting", "offscreen"],
-  "host_permissions": ["https://api.anthropic.com/*"],
+  "permissions": [
+    "activeTab",
+    "storage",
+    "scripting",
+    "offscreen"
+  ],
+  "host_permissions": [
+    "https://api.anthropic.com/*",
+    "https://api.groq.com/*"
+  ],
   "background": {
     "service_worker": "src/background.js",
     "type": "module"

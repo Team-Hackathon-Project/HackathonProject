@@ -162,7 +162,7 @@ export function stubFetch(responses) {
   const queue = Array.isArray(responses) ? [...responses] : [responses];
   const calls = [];
   const impl = async (url, init) => {
-    calls.push({ url, init, body: JSON.parse(init.body) });
+    calls.push({ url, init, body: init && init.body ? JSON.parse(init.body) : null });
     const next = queue.length > 1 ? queue.shift() : queue[0];
     if (typeof next === 'function') return next(url, init);
     const { status = 200, json = {}, text = null } = next;
@@ -189,6 +189,23 @@ export function messageResponse(payload) {
       stop_reason: 'end_turn',
       content: [{ type: 'text', text: JSON.stringify(payload) }],
       usage: { input_tokens: 100, output_tokens: 50 },
+    },
+  };
+}
+
+/** Groq/OpenAI-shaped response envelope carrying one JSON payload. */
+export function groqResponse(payload, { raw = null } = {}) {
+  return {
+    json: {
+      id: 'chatcmpl_test',
+      object: 'chat.completion',
+      model: 'llama-3.3-70b-versatile',
+      choices: [{
+        index: 0,
+        finish_reason: 'stop',
+        message: { role: 'assistant', content: raw === null ? JSON.stringify(payload) : raw },
+      }],
+      usage: { prompt_tokens: 100, completion_tokens: 50 },
     },
   };
 }
