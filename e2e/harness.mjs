@@ -16,8 +16,15 @@ import { readFileSync, writeFileSync, mkdirSync, cpSync, rmSync, existsSync } fr
 import { fileURLToPath } from 'node:url';
 import os from 'node:os';
 import path from 'node:path';
+import { loadEnv, credentialsFromEnv, describeKey } from './env.mjs';
 
 export const ROOT = fileURLToPath(new URL('../', import.meta.url));
+
+// Credentials for these runs live in a gitignored `.env` (see `.env.example`).
+// Anything already in the environment wins, so a one-off key on the command
+// line still overrides the file.
+loadEnv(path.join(ROOT, '.env'));
+export { credentialsFromEnv, describeKey };
 
 /** Where Chromium/Chrome/Edge might be on this machine. */
 const BROWSERS = [

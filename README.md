@@ -58,7 +58,9 @@ e2e/
 docs/
   DEMO.md                  Three-minute demo script, with real screenshots
   provider-check.mjs       Confirms a provider answers from the service worker
-test/                      139 tests: node:test + jsdom
+  live-quote.mjs           Real key, live page: a genuine repair and advisory
+  env.mjs                  Reads the gitignored .env the runs take keys from
+test/                      145 tests: node:test + jsdom
 ```
 
 ## How the self-healing loop works
@@ -142,12 +144,30 @@ Advisory output:
 ## Commands
 
 ```bash
-npm run check     # static validation + the full test suite (139 tests)
+npm run check     # static validation + the full test suite (145 tests)
 npm run package   # dist/self-healing-market-scraper-<version>.zip
 npm run e2e       # drive the real extension in a real browser, live site
 npm run e2e:heal  # drive the repair loop against a mangled page, offline
-npm run e2e:provider -- groq gsk_…   # does this key and model actually answer?
+npm run e2e:provider   # does the configured key and model actually answer?
+npm run e2e:live       # real repair + real advisory on a live page (spends tokens)
 ```
+
+### Credentials for the e2e runs
+
+The browser runs read their key from a gitignored `.env`, so it never lands in a
+shell history and nothing prints it back:
+
+```bash
+cp .env.example .env
+# paste your key into GROQ_API_KEY (or ANTHROPIC_API_KEY), then:
+npm run e2e:provider   # confirms the key works, and says which model answered
+npm run e2e:live       # one real scan: repair a stale selector, write an advisory
+```
+
+`.env` feeds the test tooling only — the extension itself takes its key from the
+options page. `npm run package` never includes it. With no key configured,
+`npm run e2e:provider` still runs as a transport-only check, and everything else
+falls back to the local rules engine.
 
 `npm run lint` alone runs `scripts/validate.mjs`, which catches the failures
 Chrome only reports at load time: manifest shape, permission drift, missing
@@ -188,7 +208,8 @@ too, because smaller models do that.
 
 Both endpoints have been confirmed reachable from the MV3 service worker
 (`npm run e2e:provider`), and the full repair loop has been driven end to end in
-both wire formats (`npm run e2e:heal`, `npm run e2e:heal -- groq`).
+both wire formats (`npm run e2e:heal`, `npm run e2e:heal -- groq`). To prove a
+real key end to end, put it in `.env` and run `npm run e2e:live`.
 
 ## What has been verified in a real browser
 

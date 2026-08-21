@@ -6,7 +6,7 @@ screenshot below is a real capture from a real browser run, not a mockup.
 ## Setup (before you present)
 
 ```bash
-npm install && npm run check     # 139 tests, static bundle validation
+npm install && npm run check     # 145 tests, static bundle validation
 ```
 
 Load it: `chrome://extensions` (or `edge://extensions`) → **Developer mode** →
@@ -89,7 +89,7 @@ the model id is never a guess.
 
 ## If you are asked "what have you actually verified?"
 
-- `npm run check` — 139 unit/integration tests plus static manifest and module
+- `npm run check` — 145 unit/integration tests plus static manifest and module
   graph validation.
 - Real browser runs (`npm run e2e`, `npm run e2e:heal`) against
   **finance.yahoo.com** (all five fields, no healing), **stockanalysis.com** and
@@ -99,7 +99,8 @@ the model id is never a guess.
 - The packaged zip from `npm run package` was extracted and loaded as an
   extension, and the full scan → advise → approve → log flow re-run from it.
 - Both providers answer from inside the service worker (`npm run e2e:provider`),
-  and the repair loop was driven end to end in both wire formats.
+  and the repair loop was driven end to end in both wire formats. With a key in
+  `.env`, `npm run e2e:live` does the whole thing for real against a live page.
 
 ## Known limits, stated up front
 

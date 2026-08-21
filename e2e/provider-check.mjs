@@ -3,9 +3,11 @@
  * exercised through the extension's own service worker — the only place that
  * matters, since that is where every real call originates.
  *
- *   npm run e2e:provider -- groq gsk_…       # full round trip with your key
- *   npm run e2e:provider -- anthropic sk-…
- *   npm run e2e:provider -- groq             # transport only, no key needed
+ *   npm run e2e:provider                     # uses the key in .env
+ *   npm run e2e:provider -- anthropic        # the other provider from .env
+ *   npm run e2e:provider -- groq gsk_…       # a one-off key, bypassing .env
+ *
+ * With no key configured anywhere it still runs, as a transport-only check.
  *
  * Without a key it sends a deliberately unauthenticated request: an HTTP 401
  * coming back is a pass, because it proves the host permission and CORS let the
@@ -13,11 +15,17 @@
  * negative. With a key it is the real thing, and the only way to confirm that a
  * given model honours structured output.
  */
-import { stageExtension, launch, serviceWorker, sleep } from './harness.mjs';
+import { stageExtension, launch, serviceWorker, sleep, credentialsFromEnv, describeKey } from './harness.mjs';
 
-const providerId = process.argv[2] || 'groq';
-const apiKey = process.argv[3] || '';
+const fromEnv = credentialsFromEnv();
+const providerId = process.argv[2] || fromEnv.provider;
+// A key on the command line wins; otherwise .env supplies it, and if that is
+// empty the run falls back to a transport-only check with a dummy key.
+const apiKey = process.argv[3] || (providerId === fromEnv.provider ? fromEnv.apiKey : (fromEnv.all[providerId] || {}).apiKey || '');
+const model = providerId === fromEnv.provider ? fromEnv.model : (fromEnv.all[providerId] || {}).model || '';
 const log = (...args) => console.log('[provider]', ...args);
+
+log(`provider: ${providerId} · key: ${describeKey(apiKey)}${apiKey ? '' : ' (transport-only check)'}`);
 
 const extensionDir = stageExtension([]);
 const browser = await launch(extensionDir, 'market-scraper-e2e-provider');
@@ -29,14 +37,14 @@ try {
   await page.goto(`chrome-extension://${extensionId}/src/options.html`, { waitUntil: 'load' });
   await sleep(600);
 
-  const response = await page.evaluate(async (provider, key) => {
+  const response = await page.evaluate(async (provider, key, chosenModel) => {
     const started = Date.now();
     const result = await chrome.runtime.sendMessage({
       type: 'TEST_PROVIDER',
-      payload: { provider, apiKey: key || 'not-a-real-key', model: '' },
+      payload: { provider, apiKey: key || 'not-a-real-key', model: chosenModel || '' },
     });
     return { ...result, roundTripMs: Date.now() - started };
-  }, providerId, apiKey);
+  }, providerId, apiKey, model);
 
   log(JSON.stringify(response, null, 2));
 
