@@ -1,228 +1,562 @@
-:root {
-  color-scheme: light dark;
-  --bg: #0f1720;
-  --surface: #17222e;
-  --surface-2: #1e2b39;
-  --line: #2a3a4b;
-  --text: #e8f0f6;
-  --muted: #93a7b8;
-  --accent: #2dd4bf;
-  --buy: #34d399;
-  --sell: #f87171;
-  --hold: #fbbf24;
-  --warn: #f59e0b;
-}
-
-* { box-sizing: border-box; }
+/*
+ * Popup surface.
+ *
+ * The popup is 400x600 at most, so the layout is a single column with a fixed
+ * header and one scrolling body. Three ideas carry the design:
+ *
+ *  - The verdict is felt before it is read. When an advisory lands, a very
+ *    faint wash (6% alpha) tints the top of the whole panel in the verdict's
+ *    hue. You register "this is a sell" peripherally, then read the word.
+ *  - The agent is visible while it works. A one-pixel rail under the header
+ *    sweeps while a scan is in flight, so the popup never looks frozen.
+ *  - Confidence is a measuring instrument, not a progress bar. The meter is
+ *    masked into discrete ticks, which reads as a gauge rather than a download.
+ */
 
 body {
-  margin: 0;
-  width: 384px;
+  width: 400px;
   max-height: 600px;
   overflow-y: auto;
-  background: var(--bg);
-  color: var(--text);
-  font: 13px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  overflow-x: hidden;
+  position: relative;
 }
 
+/* The verdict wash. Neutral until an advisory sets body[data-verdict]. */
+.tone {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 190px;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0;
+  transition: opacity var(--slow) var(--ease), background var(--slow) var(--ease);
+  background: radial-gradient(120% 100% at 50% 0%, var(--tone-color, transparent) 0%, transparent 70%);
+}
+body[data-verdict] .tone { opacity: 1; }
+body[data-verdict="BUY"] { --tone-color: color-mix(in srgb, var(--up) 14%, transparent); }
+body[data-verdict="SELL"] { --tone-color: color-mix(in srgb, var(--down) 14%, transparent); }
+body[data-verdict="HOLD"] { --tone-color: color-mix(in srgb, var(--hold) 12%, transparent); }
+
+/* ---------------------------------------------------------------- *
+ * Header
+ * ---------------------------------------------------------------- */
+
 .topbar {
+  position: sticky;
+  top: 0;
+  z-index: 4;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
-  padding: 12px 14px;
-  border-bottom: 1px solid var(--line);
-  position: sticky;
-  top: 0;
-  background: var(--bg);
-  z-index: 2;
+  gap: 10px;
+  padding: 12px 16px;
+  background: color-mix(in srgb, var(--canvas) 82%, transparent);
+  backdrop-filter: saturate(140%) blur(14px);
+  -webkit-backdrop-filter: saturate(140%) blur(14px);
+  border-bottom: 1px solid var(--hair);
 }
 
-.brand { display: flex; align-items: center; gap: 10px; }
+.brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
 
+/* The mark is a heartbeat trace: the scraper's pulse on a page. */
 .mark {
-  width: 26px;
-  height: 26px;
-  border-radius: 7px;
-  background: linear-gradient(135deg, var(--accent), #1d7f77);
+  position: relative;
+  width: 28px;
+  height: 28px;
   flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 9px;
+  border: 1px solid var(--hair-2);
+  background: var(--panel-2);
+  color: var(--ink);
 }
+.mark svg { width: 16px; height: 16px; }
 
-h1 { font-size: 14px; margin: 0; letter-spacing: 0.2px; }
-h2 { font-size: 12px; margin: 0; text-transform: uppercase; letter-spacing: 0.6px; color: var(--muted); }
-h3 { font-size: 14px; margin: 0 0 8px; }
-
-.sub { margin: 0; font-size: 11px; color: var(--muted); }
-
-.icon-btn {
-  background: transparent;
-  border: 1px solid var(--line);
-  color: var(--muted);
-  border-radius: 6px;
-  padding: 4px 8px;
-  font-size: 11px;
-  cursor: pointer;
-}
-.icon-btn:hover { color: var(--text); border-color: var(--accent); }
-
-main { padding: 12px 14px 18px; display: flex; flex-direction: column; gap: 12px; }
-
-button { font-family: inherit; }
-
-.primary {
-  width: 100%;
-  padding: 10px 12px;
-  border: 0;
-  border-radius: 8px;
-  background: var(--accent);
-  color: #05231f;
-  font-weight: 650;
-  font-size: 13px;
-  cursor: pointer;
-}
-.primary:hover { filter: brightness(1.08); }
-.primary:disabled { opacity: 0.55; cursor: progress; }
-.primary.small { width: auto; padding: 7px 12px; font-size: 12px; }
-
-.status { margin: 0; font-size: 12px; color: var(--muted); min-height: 16px; }
-.status.error { color: var(--sell); }
-
-.card {
-  background: var(--surface);
-  border: 1px solid var(--line);
+/* A ring that breathes out of the mark while the agent is working. */
+.mark::after {
+  content: "";
+  position: absolute;
+  inset: -1px;
   border-radius: 10px;
-  padding: 12px;
+  border: 1px solid var(--agent);
+  opacity: 0;
+}
+body[data-busy="1"] .mark::after { animation: pulse-ring 1.6s var(--ease) infinite; }
+
+.brand-text { display: flex; flex-direction: column; min-width: 0; }
+
+.brand-name {
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.012em;
+  line-height: 1.25;
+}
+
+.sub {
+  margin: 0;
+  font-size: 10.5px;
+  line-height: 1.35;
+  color: var(--ink-3);
+  font-variant-numeric: normal;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 220px;
+}
+
+/* Indeterminate activity rail: one hairline, no spinner, no layout shift. */
+.rail {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 1px;
+  overflow: hidden;
+  opacity: 0;
+  transition: opacity var(--base) var(--ease);
+}
+.rail span {
+  display: block;
+  width: 40%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, var(--agent), transparent);
+}
+body[data-busy="1"] .rail { opacity: 1; }
+body[data-busy="1"] .rail span { animation: sweep 1.25s var(--ease) infinite; }
+
+/* ---------------------------------------------------------------- *
+ * Body
+ * ---------------------------------------------------------------- */
+
+main {
+  position: relative;
+  z-index: 1;
+  padding: 14px 16px 20px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 12px;
 }
 
-.card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+main > * { animation: rise var(--base) var(--ease) both; }
 
-.ticker { font-size: 18px; text-transform: none; letter-spacing: 0; color: var(--text); font-weight: 700; }
+.scan { display: flex; flex-direction: column; gap: 8px; }
 
-.price { margin: 0; font-size: 24px; font-weight: 700; letter-spacing: -0.5px; }
+#scrape-btn { padding: 11px 14px; font-size: 13.5px; }
 
-.change { font-weight: 650; font-size: 13px; }
-.change.up { color: var(--buy); }
-.change.down { color: var(--sell); }
+/* The status line reads as an instrument readout: a state dot, then the text. */
+.statusline { display: flex; align-items: flex-start; gap: 7px; min-height: 17px; }
 
-.muted { color: var(--muted); font-weight: 400; }
-.small { font-size: 11px; }
-.mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; }
-
-.metrics { display: flex; gap: 18px; margin: 0; }
-.metrics dt { font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); }
-.metrics dd { margin: 2px 0 0; font-size: 13px; font-weight: 600; }
-
-details summary { cursor: pointer; font-size: 11px; color: var(--muted); }
-details ul { margin: 6px 0 0; padding-left: 16px; color: var(--muted); }
-details li { margin-bottom: 3px; word-break: break-all; }
-
-.banner {
-  border-radius: 8px;
-  padding: 8px 10px;
-  font-size: 11.5px;
-  border: 1px solid transparent;
+.dot {
+  width: 6px;
+  height: 6px;
+  flex: none;
+  margin-top: 5px;
+  border-radius: 99px;
+  background: var(--ink-3);
+  transition: background var(--base) var(--ease);
 }
-.banner.heal { background: rgba(45, 212, 191, 0.1); border-color: rgba(45, 212, 191, 0.35); color: #a5f3ec; }
-.banner.warn { background: rgba(245, 158, 11, 0.1); border-color: rgba(245, 158, 11, 0.35); color: #fcd9a0; }
-.banner ul { margin: 4px 0 0; padding-left: 16px; }
+body[data-busy="1"] .dot { background: var(--agent); animation: pulse-ring 1.4s var(--ease) infinite; }
+.statusline:has(.status.error) .dot { background: var(--down); animation: none; }
+/* No message, no indicator - but keep the space so nothing jumps. */
+.statusline:has(.status:empty) .dot { visibility: hidden; }
 
-.badge {
-  padding: 4px 10px;
-  border-radius: 999px;
-  font-weight: 750;
+/* ---------------------------------------------------------------- *
+ * Empty state - the popup teaches the loop in one glance.
+ * ---------------------------------------------------------------- */
+
+.empty { gap: 12px; }
+
+.steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+
+.steps li {
+  display: grid;
+  grid-template-columns: 20px 1fr;
+  gap: 10px;
+  align-items: start;
   font-size: 12px;
-  letter-spacing: 0.6px;
-  background: var(--surface-2);
-  color: var(--muted);
+  color: var(--ink-2);
 }
-.badge.BUY { background: rgba(52, 211, 153, 0.16); color: var(--buy); }
-.badge.SELL { background: rgba(248, 113, 113, 0.16); color: var(--sell); }
-.badge.HOLD { background: rgba(251, 191, 36, 0.16); color: var(--hold); }
 
-.confidence { display: flex; align-items: center; gap: 8px; }
-.confidence-track { flex: 1; height: 6px; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
-.confidence-fill { height: 100%; width: 0; background: var(--accent); transition: width 200ms ease; }
+.steps b {
+  display: block;
+  color: var(--ink);
+  font-weight: 550;
+  font-size: 12.5px;
+  letter-spacing: -0.008em;
+}
 
-.rationale { margin: 0; font-size: 12.5px; color: #d3e2ee; }
-
-.disclaimer { margin: 0; font-size: 10.5px; color: var(--muted); font-style: italic; }
-
-.actions { display: flex; gap: 6px; }
-.actions button {
-  flex: 1;
-  padding: 8px 6px;
+.steps .n {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
   border-radius: 7px;
+  border: 1px solid var(--hair);
+  background: var(--inset);
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--ink-3);
+}
+
+/* ---------------------------------------------------------------- *
+ * Snapshot
+ * ---------------------------------------------------------------- */
+
+.card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+
+.ticker {
+  font-size: 15px;
+  font-weight: 620;
+  letter-spacing: -0.015em;
+  line-height: 1.2;
+}
+
+.price {
+  margin: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  font-family: var(--font-display);
+  font-size: 34px;
+  font-weight: 620;
+  letter-spacing: -0.035em;
+  line-height: 1.05;
+}
+.price .cur { font-size: 12px; font-weight: 550; letter-spacing: 0.02em; color: var(--ink-3); }
+
+/* The change reads as a signed quantity, with the direction carried by a
+   caret so it survives being printed in greyscale or read colour-blind. */
+.change {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   font-size: 12px;
   font-weight: 600;
-  cursor: pointer;
-  border: 1px solid var(--line);
-  background: var(--surface-2);
-  color: var(--text);
+  letter-spacing: -0.005em;
+  color: var(--ink-3);
+  white-space: nowrap;
 }
-.approve:hover { border-color: var(--buy); color: var(--buy); }
-.reject:hover { border-color: var(--sell); color: var(--sell); }
-.override:hover { border-color: var(--hold); color: var(--hold); }
 
-.override-panel { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
-.override-panel label { font-size: 11px; color: var(--muted); }
-select, input[type="text"], input[type="number"], input[type="password"] {
-  background: var(--surface-2);
-  border: 1px solid var(--line);
-  color: var(--text);
-  border-radius: 6px;
-  padding: 6px 8px;
-  font: inherit;
-  font-size: 12px;
+/* The chip is earned by having a direction to report. A page that gave us no
+   change figure gets a bare dash, not an empty badge. */
+.change.up,
+.change.down {
+  padding: 3px 8px;
+  border-radius: 99px;
+  border: 1px solid var(--hair);
+  background: var(--inset);
 }
-.override-panel input[type="text"] { flex: 1; min-width: 120px; }
+.change.up::before,
+.change.down::before { content: ""; width: 0; height: 0; flex: none; }
+.change.up { color: var(--up); border-color: color-mix(in srgb, var(--up) 32%, transparent); }
+.change.down { color: var(--down); border-color: color-mix(in srgb, var(--down) 32%, transparent); }
+.change.up::before {
+  border-left: 3.5px solid transparent;
+  border-right: 3.5px solid transparent;
+  border-bottom: 5px solid currentColor;
+}
+.change.down::before {
+  border-left: 3.5px solid transparent;
+  border-right: 3.5px solid transparent;
+  border-top: 5px solid currentColor;
+}
 
-.log { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 5px; }
-.log li { display: flex; justify-content: space-between; gap: 8px; font-size: 11.5px; color: var(--muted); }
-.log .verdict { font-weight: 700; }
-.log .verdict.APPROVED { color: var(--buy); }
-.log .verdict.REJECTED { color: var(--sell); }
+.metrics {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1px;
+  margin: 2px 0 0;
+  background: var(--hair);
+  border: 1px solid var(--hair);
+  border-radius: var(--r-2);
+  overflow: hidden;
+}
+.metrics > div { background: var(--panel); padding: 8px 10px; }
+.metrics dt {
+  font-size: 9.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-3);
+}
+.metrics dd { margin: 3px 0 0; font-size: 13px; font-weight: 600; letter-spacing: -0.01em; }
+
+/* An automatic target change is the user's own numbers moving. It gets a
+   marked-up note, never a silent write. */
+.note {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--ink-2);
+  padding: 8px 10px;
+  border-radius: var(--r-1);
+  background: var(--inset);
+  border-left: 2px solid var(--hair-2);
+}
+
+.disclosures { display: flex; flex-direction: column; gap: 2px; border-top: 1px solid var(--hair); padding-top: 8px; }
+.disclosures ul { margin: 6px 0 4px; padding-left: 16px; color: var(--ink-2); font-size: 11px; }
+.disclosures li { margin-bottom: 4px; word-break: break-word; }
+.disclosures .mono li { word-break: break-all; }
+
+/* ---------------------------------------------------------------- *
+ * Banners
+ * ---------------------------------------------------------------- */
+
+.banner {
+  border-radius: var(--r-2);
+  padding: 9px 11px 9px 12px;
+  font-size: 11.5px;
+  line-height: 1.45;
+  border: 1px solid var(--hair);
+  background: var(--panel);
+  position: relative;
+  overflow: hidden;
+  animation: rise var(--base) var(--ease) both;
+}
+.banner::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+}
+.banner ul { margin: 5px 0 0; padding-left: 15px; }
+.banner li { margin-bottom: 3px; overflow-wrap: anywhere; line-height: 1.5; }
+/* Healed entries are selectors; warnings are sentences. */
+.banner.heal li { font-family: var(--font-mono); font-size: 10.5px; }
+
+.banner-title {
+  font-size: 10px;
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-3);
+}
+
+.banner.heal { color: var(--ink); background: color-mix(in srgb, var(--agent) 7%, var(--panel)); }
+.banner.heal::before { background: var(--agent); }
+.banner.warn { color: var(--ink); background: color-mix(in srgb, var(--warn) 7%, var(--panel)); }
+.banner.warn::before { background: var(--warn); }
+
+/* A field this page does not carry is information, not a fault. It gets the
+   same shape as a warning and none of the alarm. */
+.banner.note { color: var(--ink-2); background: var(--panel); }
+.banner.note::before { background: var(--hair-2); }
+.banner.note .banner-title { color: var(--ink-3); }
+
+/* ---------------------------------------------------------------- *
+ * Setup prompt
+ * ---------------------------------------------------------------- */
+
+.setup { gap: 12px; }
+.setup-head { display: grid; grid-template-columns: 28px 1fr; gap: 11px; align-items: start; }
+
+.setup-icon {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 9px;
+  border: 1px solid var(--hair);
+  background: var(--inset);
+  color: var(--ink-2);
+}
+.setup-icon svg { width: 15px; height: 15px; }
+
+.setup-text b {
+  display: block;
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: -0.008em;
+  margin-bottom: 3px;
+}
+.setup-text p { margin: 0; font-size: 11.5px; line-height: 1.5; color: var(--ink-2); }
+.setup .btn { align-self: flex-start; }
+
+/* ---------------------------------------------------------------- *
+ * Advisory
+ * ---------------------------------------------------------------- */
+
+.advice { gap: 12px; }
+
+.advice .verdict { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+
+/* The verdict word itself. Class name is load-bearing: popup.js writes
+   `badge <ACTION>` so the action doubles as the style hook. */
+.badge {
+  font-family: var(--font-display);
+  font-size: 26px;
+  font-weight: 680;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  color: var(--ink-2);
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+}
+.badge::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 99px;
+  background: currentColor;
+  box-shadow: 0 0 0 4px color-mix(in srgb, currentColor 16%, transparent);
+}
+.badge.BUY { color: var(--up); }
+.badge.SELL { color: var(--down); }
+.badge.HOLD { color: var(--hold); }
+
+.score { font-size: 11px; font-weight: 550; color: var(--ink-3); white-space: nowrap; }
+
+/* Ticked gauge: the fill is a plain width, the ticks are a mask over it. */
+.confidence-track {
+  height: 12px;
+  background: var(--inset);
+  -webkit-mask-image: repeating-linear-gradient(90deg, #000 0 2px, transparent 2px 5px);
+  mask-image: repeating-linear-gradient(90deg, #000 0 2px, transparent 2px 5px);
+}
+.confidence-fill {
+  height: 100%;
+  width: 0;
+  background: var(--ink-3);
+  transition: width var(--slow) var(--ease), background var(--base) var(--ease);
+}
+body[data-verdict="BUY"] .confidence-fill { background: var(--up); }
+body[data-verdict="SELL"] .confidence-fill { background: var(--down); }
+body[data-verdict="HOLD"] .confidence-fill { background: var(--hold); }
+
+.rationale {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--ink);
+  letter-spacing: -0.004em;
+}
+
+.source {
+  margin: 0;
+  font-size: 10.5px;
+  color: var(--ink-3);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.source::before {
+  content: "";
+  width: 12px;
+  height: 1px;
+  flex: none;
+  background: var(--hair-2);
+}
+
+.advice .disclaimer {
+  border-top: 1px solid var(--hair);
+  padding-top: 10px;
+}
+
+.actions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.actions .btn { padding: 9px 8px; font-size: 12px; }
+
+/* The three decisions are equally weighted: the extension must not nudge. */
+.approve:hover { border-color: color-mix(in srgb, var(--up) 45%, transparent); color: var(--up); }
+.reject:hover { border-color: color-mix(in srgb, var(--down) 45%, transparent); color: var(--down); }
+.override:hover { border-color: color-mix(in srgb, var(--hold) 45%, transparent); color: var(--hold); }
+
+.override-panel {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 7px;
+  align-items: center;
+  padding: 11px;
+  border-radius: var(--r-2);
+  background: var(--inset);
+  border: 1px solid var(--hair);
+  animation: rise var(--fast) var(--ease) both;
+}
+.override-panel label {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-3);
+}
+.override-panel #override-note { grid-column: 1 / -1; }
+.override-panel #override-confirm { grid-column: 1 / -1; justify-self: start; }
+
+/* ---------------------------------------------------------------- *
+ * Decision log
+ * ---------------------------------------------------------------- */
+
+.log { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.log li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  font-size: 11.5px;
+  color: var(--ink-2);
+  padding: 7px 0;
+  border-bottom: 1px solid var(--hair);
+}
+.log li:last-child { border-bottom: 0; padding-bottom: 0; }
+.log li:first-child { padding-top: 0; }
+
+.log .verdict {
+  font-size: 9.5px;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+.log .verdict.APPROVED { color: var(--up); }
+.log .verdict.REJECTED { color: var(--down); }
 .log .verdict.OVERRIDDEN { color: var(--hold); }
+
+/* ---------------------------------------------------------------- *
+ * Confirmation modal
+ * ---------------------------------------------------------------- */
 
 .modal {
   position: fixed;
   inset: 0;
-  background: rgba(4, 10, 16, 0.72);
+  z-index: 20;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 20px;
-  z-index: 10;
+  background: color-mix(in srgb, var(--canvas) 72%, transparent);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  animation: fade var(--fast) var(--ease) both;
 }
+
+@keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes pop {
+  from { opacity: 0; transform: translateY(8px) scale(0.97); }
+  to { opacity: 1; transform: none; }
+}
+
 .modal-box {
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: 14px;
+  background: var(--panel);
+  border: 1px solid var(--hair-2);
+  border-radius: var(--r-3);
+  padding: 16px;
   width: 100%;
-  max-width: 340px;
+  max-width: 336px;
   display: flex;
   flex-direction: column;
   gap: 10px;
+  box-shadow: var(--shadow-2);
+  animation: pop var(--base) var(--ease) both;
 }
-.modal-actions { display: flex; gap: 8px; justify-content: flex-end; }
-.modal-actions button { padding: 7px 14px; border-radius: 7px; font-size: 12px; cursor: pointer; border: 1px solid var(--line); background: var(--surface-2); color: var(--text); }
-.modal-actions .primary { border: 0; }
 
-.hidden { display: none !important; }
+.modal-box h3 { font-size: 14px; font-weight: 620; letter-spacing: -0.012em; }
+#modal-body { margin: 0; font-size: 12.5px; line-height: 1.5; color: var(--ink); }
 
-@media (prefers-color-scheme: light) {
-  :root {
-    --bg: #f6f9fb;
-    --surface: #ffffff;
-    --surface-2: #eef3f7;
-    --line: #d7e2ea;
-    --text: #10222f;
-    --muted: #5a7183;
-    --accent: #0d9488;
-  }
-  .primary { color: #ffffff; }
-  .rationale { color: #24384a; }
-}
+.modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 2px; }

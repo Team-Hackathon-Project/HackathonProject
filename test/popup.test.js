@@ -228,3 +228,39 @@ test('a manual position shows no targets line', async () => {
   await settle();
   assert.equal(el('targets-line').classList.contains('hidden'), true);
 });
+
+test('a field the page lacks is a quiet notice, not a warning', async () => {
+  scrapeResult = {
+    ...scrapeResult,
+    healed: [],
+    warnings: [],
+    notices: ['This page does not show a volume figure.', 'This page does not show any headlines.'],
+  };
+  click('scrape-btn');
+  await settle();
+
+  assert.equal(el('notice-banner').classList.contains('hidden'), false);
+  assert.match(el('notice-banner').textContent, /Not on this page/);
+  assert.match(el('notice-banner').textContent, /does not show a volume figure/);
+  assert.equal(el('warn-banner').classList.contains('hidden'), true, 'nothing here is a fault');
+});
+
+test('warnings keep their own banner, headed so they read as actionable', async () => {
+  scrapeResult = { ...scrapeResult, notices: [], warnings: ['Could not repair the price: selector matched no elements'] };
+  click('scrape-btn');
+  await settle();
+
+  assert.equal(el('warn-banner').classList.contains('hidden'), false);
+  assert.match(el('warn-banner').textContent, /Needs your attention/);
+  assert.equal(el('notice-banner').classList.contains('hidden'), true);
+});
+
+test('with a key configured the setup prompt stays out of the way', () => {
+  assert.ok(el('setup-card').classList.contains('hidden'));
+});
+
+test('the setup prompt opens the options page', () => {
+  sent.length = 0;
+  click('setup-btn');
+  assert.ok(sent.some((message) => message.type === 'OPEN_OPTIONS'));
+});

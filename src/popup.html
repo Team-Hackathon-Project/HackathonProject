@@ -4,65 +4,141 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Market Advisory Engine</title>
+    <link rel="stylesheet" href="theme.css" />
     <link rel="stylesheet" href="popup.css" />
   </head>
   <body>
+    <div class="tone" aria-hidden="true"></div>
+    <div class="grain" aria-hidden="true"></div>
+
     <header class="topbar">
       <div class="brand">
-        <span class="mark" aria-hidden="true"></span>
-        <div>
-          <h1>Market Advisory</h1>
-          <p class="sub" id="context-line">Self-healing scraper</p>
+        <span class="mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M2 12h4l2.5-7 4 14 2.5-7h7" />
+          </svg>
+        </span>
+        <div class="brand-text">
+          <h1 class="brand-name">Market Advisory</h1>
+          <span class="sub" id="context-line">Self-healing scraper</span>
         </div>
       </div>
-      <button id="options-btn" class="icon-btn" type="button" title="Options">Settings</button>
+      <button id="options-btn" class="icon-btn" type="button" title="Settings" aria-label="Settings">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="3" />
+          <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-2.9 1.2v.2a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.6 1.7 1.7 0 0 0-1.9.4l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0-1.2-2.9H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.6-1.1 1.7 1.7 0 0 0-.4-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3h.1A1.7 1.7 0 0 0 10 3.1V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.4l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9v.1a1.7 1.7 0 0 0 1.6 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" />
+        </svg>
+      </button>
+      <div class="rail" aria-hidden="true"><span></span></div>
     </header>
 
     <main>
-      <button id="scrape-btn" class="primary" type="button">Scan this tab</button>
+      <section class="scan">
+        <button id="scrape-btn" class="btn primary block" type="button">
+          <svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="11" cy="11" r="7" />
+            <path d="M11 7.5v7M7.5 11h7" />
+            <path d="m20 20-3.6-3.6" />
+          </svg>
+          <span>Scan this tab</span>
+        </button>
+        <div class="statusline">
+          <span class="dot" aria-hidden="true"></span>
+          <p id="status" class="status" role="status" aria-live="polite"></p>
+        </div>
+      </section>
 
-      <p id="status" class="status" role="status" aria-live="polite"></p>
+      <section id="setup-card" class="card setup hidden">
+        <div class="setup-head">
+          <span class="setup-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="8" cy="14" r="4" />
+              <path d="m11 11 8-8M17 5l2 2M14 8l2 2" />
+            </svg>
+          </span>
+          <div class="setup-text">
+            <b>Running on local rules</b>
+            <p>Add a model API key and the agent can repair selectors when a page changes, and write the advisory itself. Without one it still scans and still advises — just from the built-in rules.</p>
+          </div>
+        </div>
+        <button id="setup-btn" class="btn small" type="button">Add an API key</button>
+      </section>
+
+      <section id="empty-state" class="card empty">
+        <h2 class="label">How this works</h2>
+        <ol class="steps">
+          <li>
+            <span class="n" aria-hidden="true">1</span>
+            <span><b>Scan</b> Reads the ticker, price, change and volume out of the tab you are on. If the page moved its markup, the agent rewrites the selector and carries on.</span>
+          </li>
+          <li>
+            <span class="n" aria-hidden="true">2</span>
+            <span><b>Read</b> You get one call — buy, sell or hold — with a confidence gauge and the reasoning behind it.</span>
+          </li>
+          <li>
+            <span class="n" aria-hidden="true">3</span>
+            <span><b>Decide</b> Approve, reject or override. Every decision is recorded locally, and no order is ever placed.</span>
+          </li>
+        </ol>
+      </section>
 
       <section id="snapshot-card" class="card hidden" aria-labelledby="snapshot-title">
         <div class="card-head">
           <h2 id="snapshot-title" class="ticker">—</h2>
           <span id="snapshot-change" class="change"></span>
         </div>
-        <p class="price"><span id="snapshot-price">—</span> <span id="snapshot-currency" class="muted"></span></p>
+        <p class="price"><span id="snapshot-price">—</span> <span id="snapshot-currency" class="cur"></span></p>
         <dl class="metrics">
           <div><dt>Volume</dt><dd id="snapshot-volume">—</dd></div>
           <div><dt>Scraped</dt><dd id="snapshot-time">—</dd></div>
         </dl>
-        <details id="snapshot-news-wrap" class="hidden">
-          <summary>Headlines on page</summary>
-          <ul id="snapshot-news"></ul>
-        </details>
-        <details>
-          <summary>Selectors used</summary>
-          <ul id="snapshot-selectors" class="mono"></ul>
-        </details>
-        <p id="targets-line" class="muted small hidden"></p>
+        <p id="targets-line" class="note hidden"></p>
+        <div class="disclosures">
+          <details id="snapshot-news-wrap" class="hidden">
+            <summary>Headlines on page</summary>
+            <ul id="snapshot-news"></ul>
+          </details>
+          <details>
+            <summary>Selectors used</summary>
+            <ul id="snapshot-selectors" class="mono"></ul>
+          </details>
+        </div>
       </section>
 
       <section id="heal-banner" class="banner heal hidden" role="status"></section>
       <section id="warn-banner" class="banner warn hidden" role="status"></section>
+      <section id="notice-banner" class="banner note hidden" role="status"></section>
 
-      <section id="advice-card" class="card hidden" aria-labelledby="advice-title">
-        <div class="card-head">
-          <h2 id="advice-title">Advisory</h2>
+      <section id="advice-card" class="card advice hidden" aria-labelledby="advice-title">
+        <h2 id="advice-title" class="label">Advisory</h2>
+        <div class="verdict">
           <span id="advice-action" class="badge">—</span>
+          <span id="advice-score" class="score">—</span>
         </div>
-        <div class="confidence">
-          <div class="confidence-track"><div id="advice-bar" class="confidence-fill"></div></div>
-          <span id="advice-score" class="muted">—</span>
-        </div>
+        <div class="confidence-track"><div id="advice-bar" class="confidence-fill"></div></div>
         <p id="advice-rationale" class="rationale"></p>
-        <p id="advice-source" class="muted small"></p>
-        <p class="disclaimer">Recommendation only. This extension never places an order — you decide and execute yourself.</p>
+        <p id="advice-source" class="source"></p>
         <div class="actions">
-          <button id="approve-btn" class="approve" type="button">Approve</button>
-          <button id="reject-btn" class="reject" type="button">Reject</button>
-          <button id="override-btn" class="override" type="button">Override…</button>
+          <button id="approve-btn" class="btn approve" type="button">
+            <svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="m5 12.5 4.5 4.5L19 7" />
+            </svg>
+            Approve
+          </button>
+          <button id="reject-btn" class="btn reject" type="button">
+            <svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M6 6l12 12M18 6 6 18" />
+            </svg>
+            Reject
+          </button>
+          <button id="override-btn" class="btn override" type="button" title="Record a different call">
+            <svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M4 17h6M14 7h6" />
+              <circle cx="14" cy="17" r="2.6" />
+              <circle cx="10" cy="7" r="2.6" />
+            </svg>
+            Override
+          </button>
         </div>
         <div id="override-panel" class="override-panel hidden">
           <label for="override-action">Your call</label>
@@ -72,12 +148,13 @@
             <option value="HOLD">HOLD</option>
           </select>
           <input id="override-note" type="text" maxlength="200" placeholder="Why? (optional)" />
-          <button id="override-confirm" class="primary small" type="button">Log override</button>
+          <button id="override-confirm" class="btn primary small" type="button">Log override</button>
         </div>
+        <p class="disclaimer">Recommendation only. This extension never places an order — you decide and execute yourself.</p>
       </section>
 
       <section id="log-card" class="card hidden">
-        <h2>Recent decisions</h2>
+        <h2 class="label">Recent decisions</h2>
         <ul id="decision-log" class="log"></ul>
       </section>
     </main>
@@ -88,8 +165,8 @@
         <p id="modal-body"></p>
         <p class="disclaimer">Nothing is sent to a broker. This records your decision in local extension storage only.</p>
         <div class="modal-actions">
-          <button id="modal-cancel" class="reject" type="button">Cancel</button>
-          <button id="modal-confirm" class="primary small" type="button">Confirm</button>
+          <button id="modal-cancel" class="btn" type="button">Cancel</button>
+          <button id="modal-confirm" class="btn primary" type="button">Confirm</button>
         </div>
       </div>
     </div>

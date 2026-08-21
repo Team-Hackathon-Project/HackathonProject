@@ -93,6 +93,23 @@ export async function recordHealedSelector(host, field, entry) {
   return registry[host][field];
 }
 
+/**
+ * Drops one healed selector, leaving the rest of the registry alone.
+ *
+ * Used when a repaired selector is later found to be wrong — it resolved and
+ * held a plausible value, but the value belonged to the page rather than to the
+ * instrument. Forgetting it lets the next scan repair the field properly
+ * instead of serving the same wrong number forever.
+ */
+export async function forgetHealedSelector(host, field) {
+  const registry = await getRegistry();
+  if (!registry[host] || !registry[host][field]) return false;
+  delete registry[host][field];
+  if (!Object.keys(registry[host]).length) delete registry[host];
+  await saveRegistry(registry);
+  return true;
+}
+
 export async function clearRegistry() {
   await setRaw({ [STORAGE_KEYS.SELECTORS]: {} });
   return {};

@@ -1,32 +1,182 @@
+/*
+ * Options surface.
+ *
+ * A settings page for an agent that changes things on your behalf has one job
+ * beyond collecting values: making it obvious what the agent is allowed to do,
+ * and what it has already done. So the page is a two-column reading layout —
+ * a sticky rail that never loses your place, and a single measured column of
+ * cards — rather than a wall of inputs.
+ *
+ * Depends on theme.css for tokens, primitives and the field styles.
+ */
+
+html { scroll-behavior: smooth; }
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+}
+
 body.options {
-  width: auto;
-  max-width: 780px;
-  max-height: none;
+  min-height: 100vh;
+  font-size: 13px;
+}
+
+.shell {
+  display: grid;
+  grid-template-columns: 232px minmax(0, 1fr);
+  gap: 0;
+  max-width: 1120px;
   margin: 0 auto;
-  padding: 24px 20px 48px;
+  align-items: stretch;
 }
 
-body.options main { padding: 0; gap: 16px; display: flex; flex-direction: column; }
-body.options h1 { font-size: 20px; margin: 0; }
-body.options h2 { margin-bottom: 4px; }
-body.options .sub { margin: 0 0 8px; }
+/* ---------------------------------------------------------------- *
+ * Sidebar
+ * ---------------------------------------------------------------- */
 
-body.options label {
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  color: var(--muted);
-  margin-top: 4px;
+.sidebar {
+  border-right: 1px solid var(--hair);
+  padding: 26px 20px;
 }
 
-body.options label.checkbox {
-  text-transform: none;
-  letter-spacing: 0;
-  font-size: 12.5px;
-  color: var(--text);
+.sidebar-inner {
+  position: sticky;
+  top: 26px;
+  display: flex;
+  flex-direction: column;
+  gap: 26px;
+  max-height: calc(100vh - 52px);
+}
+
+.brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
+
+.mark {
+  width: 28px;
+  height: 28px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 9px;
+  border: 1px solid var(--hair-2);
+  background: var(--panel-2);
+  color: var(--ink);
+}
+.mark svg { width: 16px; height: 16px; }
+
+.brand-text { display: flex; flex-direction: column; min-width: 0; }
+.brand-name { font-family: var(--font-display); font-size: 13px; font-weight: 600; letter-spacing: -0.012em; line-height: 1.25; }
+.sub { margin: 0; font-size: 11px; color: var(--ink-3); line-height: 1.4; }
+
+.nav { display: flex; flex-direction: column; gap: 1px; }
+
+.nav-link {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 9px;
+  padding: 7px 9px;
+  border-radius: var(--r-1);
+  font-size: 12.5px;
+  color: var(--ink-2);
+  text-decoration: none;
+  transition: color var(--fast) var(--ease), background var(--fast) var(--ease);
+}
+.nav-link:hover { color: var(--ink); background: var(--panel-2); }
+
+.nav-dot {
+  width: 5px;
+  height: 5px;
+  flex: none;
+  border-radius: 99px;
+  background: var(--hair-2);
+  transition: background var(--base) var(--ease), transform var(--base) var(--ease);
+}
+
+.nav-link.is-active { color: var(--ink); font-weight: 550; }
+.nav-link.is-active .nav-dot { background: var(--ink); transform: scale(1.35); }
+
+/* What the agent is set up to do right now, without scrolling to find out. */
+.state-readout { display: flex; flex-direction: column; gap: 5px; }
+.state-readout p {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--ink-2);
+}
+.state-readout .on { color: var(--up); font-weight: 550; }
+.state-readout .off { color: var(--ink-3); }
+
+.sidebar-foot {
+  margin: auto 0 0;
+  font-size: 10.5px;
+  line-height: 1.5;
+  color: var(--ink-3);
+  padding-top: 16px;
+  border-top: 1px solid var(--hair);
+}
+
+code {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: var(--inset);
+  border: 1px solid var(--hair);
+  color: var(--ink-2);
+}
+
+/* ---------------------------------------------------------------- *
+ * Content column
+ * ---------------------------------------------------------------- */
+
+body.options main {
+  padding: 26px 28px 72px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 720px;
+  min-width: 0;
+}
+
+.page-head { display: flex; flex-direction: column; gap: 4px; margin-bottom: 2px; }
+.page-head h1 { font-size: 22px; font-weight: 620; letter-spacing: -0.024em; }
+.page-head .sub { font-size: 12.5px; color: var(--ink-2); }
+
+body.options .card { padding: 18px; gap: 14px; scroll-margin-top: 20px; }
+
+.card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.card-head h2 { font-size: 14.5px; font-weight: 620; letter-spacing: -0.014em; }
+.card-sub { margin: 3px 0 0; font-size: 12px; line-height: 1.5; color: var(--ink-2); }
+
+/* Prose in this column wraps at one shared measure.
+   Fixed rather than `ch`, because these blocks are set at three different
+   sizes and a ch-based limit would wrap each at a different x — which reads as
+   three accidents rather than one column. */
+body.options .card-sub,
+body.options .disclaimer,
+body.options .hint { max-width: 470px; }
+
+/* ---------------------------------------------------------------- *
+ * Fields
+ * ---------------------------------------------------------------- */
+
+.fields { display: flex; flex-direction: column; gap: 14px; }
+
+.field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+
+body.options label {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--ink-3);
+}
+
+.hint-inline {
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 500;
+  color: var(--ink-3);
+  opacity: 0.85;
 }
 
 body.options input[type="text"],
@@ -34,80 +184,212 @@ body.options input[type="password"],
 body.options input[type="number"],
 body.options select { width: 100%; }
 
-body.options .grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
-  gap: 8px;
-  align-items: center;
-}
+.field .disclaimer { margin-top: 2px; }
 
-body.options table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 8px; }
-body.options th {
-  text-align: left;
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  color: var(--muted);
-  padding: 6px 4px;
-  border-bottom: 1px solid var(--line);
-}
-body.options td { padding: 6px 4px; border-bottom: 1px solid var(--line); }
-body.options td button {
-  background: transparent;
-  border: 1px solid var(--line);
-  color: var(--muted);
-  border-radius: 5px;
-  padding: 3px 8px;
-  cursor: pointer;
+/* A hint sits with its field; a disclaimer explains a consequence. Same
+   quietness, different jobs, so they read as one voice. */
+.hint {
+  margin: 1px 0 0;
   font-size: 11px;
+  line-height: 1.5;
+  color: var(--ink-3);
 }
-body.options td button:hover { color: var(--sell); border-color: var(--sell); }
+.hint a { color: var(--ink-2); text-decoration: underline; text-underline-offset: 2px; }
+.hint a:hover { color: var(--ink); }
 
-body.options ul.mono { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 4px; }
-body.options ul.mono li { color: var(--muted); word-break: break-all; }
-
-body.options .reject.small {
-  align-self: flex-start;
-  padding: 7px 12px;
-  border-radius: 7px;
-  font-size: 12px;
-  cursor: pointer;
-  border: 1px solid var(--line);
-  background: var(--surface-2);
-  color: var(--text);
+.req {
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 500;
+  font-size: 9.5px;
+  color: var(--ink-3);
+  opacity: 0.9;
 }
-body.options .primary.small { align-self: flex-start; }
-body.options code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; }
 
-/* Secondary actions next to the model field: readable, but clearly not the
-   primary "Save settings" call. */
-body.options .button-row {
+.dirty {
+  font-size: 11px;
+  color: var(--warn);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.dirty::before {
+  content: "";
+  width: 5px;
+  height: 5px;
+  border-radius: 99px;
+  background: currentColor;
+}
+
+.suffixed { display: flex; align-items: center; gap: 9px; }
+.suffixed input { max-width: 140px; }
+.suffix { font-size: 11.5px; color: var(--ink-3); }
+
+.button-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+
+/* ---------------------------------------------------------------- *
+ * Switch rows - a capability, its consequence, and the control.
+ * ---------------------------------------------------------------- */
+
+.switches {
   display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-  margin: 6px 0 2px;
+  flex-direction: column;
+  gap: 1px;
+  background: var(--hair);
+  border: 1px solid var(--hair);
+  border-radius: var(--r-2);
+  overflow: hidden;
 }
 
-body.options .ghost {
-  width: auto;
-  padding: 7px 12px;
-  border-radius: 8px;
-  border: 1px solid var(--line);
-  background: transparent;
-  color: var(--text);
+/* Scoped past `body.options label`, which would otherwise shout the whole
+   row in uppercase micro-label styling. */
+body.options label.switch {
+  display: grid;
+  grid-template-columns: 15px 1fr;
+  gap: 11px;
+  align-items: start;
+  padding: 12px 13px;
+  background: var(--panel);
   cursor: pointer;
+  font-size: 12px;
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--ink);
+  transition: background var(--fast) var(--ease);
 }
+body.options label.switch:hover { background: var(--panel-2); }
+body.options label.switch input[type="checkbox"] { margin-top: 1px; }
 
-body.options .ghost:hover {
-  border-color: var(--accent);
-  color: var(--accent);
+.switch-text { font-size: 11.5px; line-height: 1.5; color: var(--ink-3); }
+.switch-text b {
+  display: block;
+  font-size: 12.5px;
+  font-weight: 550;
+  color: var(--ink);
+  letter-spacing: -0.008em;
+  margin-bottom: 2px;
 }
 
 body.options label.checkbox.inline {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 7px;
   margin: 0;
   font-size: 12px;
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--ink-2);
   white-space: nowrap;
+  cursor: pointer;
+}
+
+/* ---------------------------------------------------------------- *
+ * Card footer: the commit action and its acknowledgement
+ * ---------------------------------------------------------------- */
+
+.card-foot {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding-top: 14px;
+  border-top: 1px solid var(--hair);
+}
+
+.btn.danger { color: var(--ink-2); }
+.btn.danger:hover {
+  color: var(--down);
+  border-color: color-mix(in srgb, var(--down) 45%, transparent);
+  background: color-mix(in srgb, var(--down) 7%, transparent);
+}
+
+/* ---------------------------------------------------------------- *
+ * Portfolio
+ * ---------------------------------------------------------------- */
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(98px, 1fr));
+  gap: 10px;
+}
+
+.table-wrap { overflow-x: auto; border: 1px solid var(--hair); border-radius: var(--r-2); }
+
+body.options table { width: 100%; border-collapse: collapse; font-size: 12px; }
+
+body.options th {
+  text-align: left;
+  font-size: 9.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-3);
+  padding: 9px 12px;
+  background: var(--panel-2);
+  border-bottom: 1px solid var(--hair);
+  white-space: nowrap;
+}
+
+body.options td {
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--hair);
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+body.options tbody tr:last-child td { border-bottom: 0; }
+body.options tbody tr:hover td { background: var(--panel-2); }
+body.options tbody td:first-child { color: var(--ink); font-weight: 600; letter-spacing: -0.01em; }
+
+body.options td button {
+  background: transparent;
+  border: 1px solid var(--hair);
+  color: var(--ink-3);
+  border-radius: var(--r-1);
+  padding: 3px 9px;
+  cursor: pointer;
+  font-size: 11px;
+  font-family: inherit;
+  transition: color var(--fast) var(--ease), border-color var(--fast) var(--ease);
+}
+body.options td button:hover { color: var(--down); border-color: color-mix(in srgb, var(--down) 45%, transparent); }
+
+/* ---------------------------------------------------------------- *
+ * Registry and repair log
+ * ---------------------------------------------------------------- */
+
+ul.lines {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--hair);
+  border-radius: var(--r-2);
+  overflow: hidden;
+}
+
+ul.lines li {
+  color: var(--ink-2);
+  word-break: break-word;
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--hair);
+  line-height: 1.5;
+  background: var(--panel);
+}
+ul.lines li:last-child { border-bottom: 0; }
+ul.lines li:nth-child(even) { background: var(--panel-2); }
+
+/* ---------------------------------------------------------------- *
+ * Narrow windows: the rail folds into a header strip.
+ * ---------------------------------------------------------------- */
+
+@media (max-width: 720px) {
+  .shell { grid-template-columns: minmax(0, 1fr); }
+  .sidebar { border-right: 0; border-bottom: 1px solid var(--hair); padding: 18px 20px; }
+  .sidebar-inner { position: static; max-height: none; gap: 16px; }
+  .nav { flex-direction: row; flex-wrap: wrap; gap: 4px; }
+  .sidebar-foot { margin: 0; }
+  body.options main { padding: 20px 20px 56px; }
 }

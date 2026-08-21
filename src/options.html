@@ -3,90 +3,209 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Market Advisory Engine — Options</title>
-    <link rel="stylesheet" href="popup.css" />
+    <title>Market Advisory Engine — Settings</title>
+    <link rel="stylesheet" href="theme.css" />
     <link rel="stylesheet" href="options.css" />
   </head>
   <body class="options">
-    <main>
-      <h1>Market Advisory Engine</h1>
-      <p class="sub">Settings, portfolio targets, and the self-healing selector registry.</p>
+    <div class="grain" aria-hidden="true"></div>
 
-      <section class="card">
-        <h2>Agent</h2>
-        <label for="provider">Model provider</label>
-        <select id="provider"></select>
+    <div class="shell">
+      <aside class="sidebar">
+        <div class="sidebar-inner">
+          <div class="brand">
+            <span class="mark" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M2 12h4l2.5-7 4 14 2.5-7h7" />
+              </svg>
+            </span>
+            <span class="brand-text">
+              <span class="brand-name">Market Advisory</span>
+              <span class="sub">Settings</span>
+            </span>
+          </div>
 
-        <label for="api-key"><span id="key-label">API key</span> <span id="key-length" class="muted small"></span></label>
-        <input id="api-key" type="password" autocomplete="off" />
-        <p class="disclaimer">
-          Stored in <code>chrome.storage.local</code> on this machine and sent only to
-          <code id="key-host">the provider</code> from the extension service worker. It is never exposed to the pages
-          you visit. Keys are kept per provider, so switching does not discard the other one. Leave it empty to run
-          fully offline: no self-healing, and advice comes from the local rules engine.
-        </p>
+          <div class="state-readout">
+            <span class="label">Agent status</span>
+            <p id="agent-state">Loading…</p>
+          </div>
 
-        <label for="model">Model</label>
-        <input id="model" type="text" list="model-list" autocomplete="off" spellcheck="false" />
-        <datalist id="model-list"></datalist>
-        <div class="button-row">
-          <button id="load-models" class="ghost small hidden" type="button">Load models from provider</button>
-          <button id="test-provider" class="ghost small" type="button">Test connection</button>
+          <nav class="nav" aria-label="Sections">
+            <a href="#agent" class="nav-link is-active">
+              <span class="nav-dot" aria-hidden="true"></span>Agent
+            </a>
+            <a href="#targets" class="nav-link">
+              <span class="nav-dot" aria-hidden="true"></span>Portfolio targets
+            </a>
+            <a href="#registry" class="nav-link">
+              <span class="nav-dot" aria-hidden="true"></span>Healed selectors
+            </a>
+            <a href="#repairs" class="nav-link">
+              <span class="nav-dot" aria-hidden="true"></span>Repair log
+            </a>
+          </nav>
+
+          <p class="sidebar-foot">
+            Everything on this page lives in <code>chrome.storage.local</code> on this machine. Nothing is
+            synced, and no order is ever placed.
+          </p>
         </div>
-        <p id="model-status" class="status" role="status" aria-live="polite"></p>
+      </aside>
 
-        <label class="checkbox"><input id="self-heal" type="checkbox" /> Repair broken selectors with the LLM</label>
-        <label class="checkbox"><input id="llm-advice" type="checkbox" /> Use the LLM for advisories (otherwise local rules only)</label>
+      <main>
+        <header class="page-head">
+          <h1>Market Advisory Engine</h1>
+          <p class="sub">Settings, portfolio targets, and the self-healing selector registry.</p>
+        </header>
 
-        <label for="snippet-chars">Max sanitized HTML sent per repair (characters)</label>
-        <input id="snippet-chars" type="number" min="1000" max="40000" step="1000" />
+        <section id="agent" class="card">
+          <header class="card-head">
+            <div>
+              <h2>Agent</h2>
+              <p class="card-sub">Which model answers, and how much of the page it is allowed to see.</p>
+            </div>
+          </header>
 
-        <button id="save-settings" class="primary small" type="button">Save settings</button>
-        <p id="settings-status" class="status" role="status" aria-live="polite"></p>
-      </section>
+          <div class="fields">
+            <div class="field">
+              <label for="provider">Model provider</label>
+              <select id="provider"></select>
+              <p class="hint">Both do the same two jobs — repair a broken selector, write an advisory. Pick whichever key you have.</p>
+            </div>
 
-      <section class="card">
-        <h2>Portfolio targets</h2>
-        <p class="disclaimer">The rules engine and the LLM both read these. Targets are what turn a quote into a signal.</p>
-        <div class="grid">
-          <input id="pos-ticker" type="text" placeholder="Ticker (AAPL)" maxlength="10" />
-          <input id="pos-shares" type="number" placeholder="Shares" step="any" min="0" />
-          <input id="pos-cost" type="number" placeholder="Avg cost" step="any" min="0" />
-          <input id="pos-buy" type="number" placeholder="Buy below" step="any" min="0" />
-          <input id="pos-sell" type="number" placeholder="Sell above" step="any" min="0" />
-          <button id="save-position" class="primary small" type="button">Save position</button>
-        </div>
-        <div class="button-row">
-          <button id="suggest-targets" class="ghost small" type="button">Suggest targets</button>
-          <label class="checkbox inline"><input id="pos-auto" type="checkbox" /> Keep them updated automatically</label>
-        </div>
-        <p id="position-status" class="status" role="status" aria-live="polite"></p>
-        <p class="disclaimer">
-          <strong>Suggest targets</strong> fills the two boxes from your own data — the average of the prices you
-          have scanned for that ticker, or your approved BUY decisions, or your average cost — with a band taken
-          from how much those scans moved. It proposes; you still press Save. Tick <em>automatically</em> and every
-          later scan of that ticker refreshes them for you.
-        </p>
-        <table id="portfolio-table">
-          <thead>
-            <tr><th>Ticker</th><th>Shares</th><th>Avg cost</th><th>Buy below</th><th>Sell above</th><th>Auto</th><th></th></tr>
-          </thead>
-          <tbody id="portfolio-body"></tbody>
-        </table>
-      </section>
+            <div class="field">
+              <label for="api-key"><span id="key-label">API key</span> <span id="key-length" class="hint-inline"></span></label>
+              <input id="api-key" type="password" autocomplete="off" spellcheck="false" />
+              <p class="hint">
+                No key? <a id="key-link" href="#" target="_blank" rel="noreferrer noopener">Get one here</a> — or leave this
+                empty and the extension keeps working from its built-in rules.
+              </p>
+              <p class="disclaimer">
+                Stored in <code>chrome.storage.local</code> on this machine and sent only to
+                <code id="key-host">the provider</code> from the extension service worker. It is never exposed to
+                the pages you visit. Keys are kept per provider, so switching does not discard the other one.
+                Leave it empty to run fully offline: no self-healing, and advice comes from the local rules engine.
+              </p>
+            </div>
 
-      <section class="card">
-        <h2>Healed selectors</h2>
-        <p class="disclaimer">Selectors the agent rewrote after a page changed. Reset to fall back to the shipped defaults.</p>
-        <ul id="registry-list" class="mono"></ul>
-        <button id="reset-registry" class="reject small" type="button">Reset healed selectors</button>
-      </section>
+            <div class="field">
+              <label for="model">Model</label>
+              <input id="model" type="text" list="model-list" autocomplete="off" spellcheck="false" />
+              <datalist id="model-list"></datalist>
+              <div class="button-row">
+                <button id="load-models" class="btn ghost small hidden" type="button">Load models from provider</button>
+                <button id="test-provider" class="btn ghost small" type="button">Test connection</button>
+              </div>
+              <p class="hint">Test connection sends one tiny request, so you find out the key works here rather than mid-scan.</p>
+              <p id="model-status" class="status" role="status" aria-live="polite"></p>
+            </div>
+          </div>
 
-      <section class="card">
-        <h2>Repair log</h2>
-        <ul id="heal-log" class="mono"></ul>
-      </section>
-    </main>
+          <div class="switches">
+            <label class="switch checkbox">
+              <input id="self-heal" type="checkbox" />
+              <span class="switch-text">
+                <b>Repair broken selectors with the LLM</b>
+                When a page moves its markup, send the surrounding HTML to the model and adopt the selector it
+                returns.
+              </span>
+            </label>
+            <label class="switch checkbox">
+              <input id="llm-advice" type="checkbox" />
+              <span class="switch-text">
+                <b>Use the LLM for advisories</b>
+                Off, the verdict comes from the local rules engine alone — no network call, no key needed.
+              </span>
+            </label>
+          </div>
+
+          <div class="field">
+            <label for="snippet-chars">How much of the page to send when repairing</label>
+            <div class="suffixed">
+              <input id="snippet-chars" type="number" min="1000" max="40000" step="1000" />
+              <span class="suffix">characters of HTML</span>
+            </div>
+            <p class="hint">Only the block around the missing value is ever sent, stripped of scripts and styling. More characters give the model more to work with and cost more tokens. 12,000 suits most quote pages.</p>
+          </div>
+
+          <footer class="card-foot">
+            <button id="save-settings" class="btn primary small" type="button">Save settings</button>
+            <span id="settings-dirty" class="dirty hidden">Unsaved changes</span>
+            <p id="settings-status" class="status" role="status" aria-live="polite"></p>
+          </footer>
+        </section>
+
+        <section id="targets" class="card">
+          <header class="card-head">
+            <div>
+              <h2>Portfolio targets</h2>
+              <p class="card-sub">The rules engine and the LLM both read these. Targets are what turn a quote into a signal.</p>
+            </div>
+          </header>
+
+          <p class="hint">
+            Only the ticker is required. Fill in <em>buy below</em> and <em>sell above</em> and the advisory has a
+            threshold to reason about; leave them empty and every verdict comes back HOLD for want of anything to compare.
+          </p>
+
+          <div class="grid">
+            <div class="field"><label for="pos-ticker">Ticker <span class="req">required</span></label><input id="pos-ticker" type="text" placeholder="AAPL" maxlength="10" autocomplete="off" /></div>
+            <div class="field"><label for="pos-shares">Shares</label><input id="pos-shares" type="number" placeholder="0" step="any" min="0" /></div>
+            <div class="field"><label for="pos-cost">Avg cost</label><input id="pos-cost" type="number" placeholder="0.00" step="any" min="0" /></div>
+            <div class="field"><label for="pos-buy">Buy below</label><input id="pos-buy" type="number" placeholder="0.00" step="any" min="0" /></div>
+            <div class="field"><label for="pos-sell">Sell above</label><input id="pos-sell" type="number" placeholder="0.00" step="any" min="0" /></div>
+          </div>
+
+          <div class="button-row">
+            <button id="save-position" class="btn primary small" type="button">Save position</button>
+            <button id="suggest-targets" class="btn ghost small" type="button">Suggest targets</button>
+            <label class="checkbox inline"><input id="pos-auto" type="checkbox" /> Keep them updated automatically</label>
+          </div>
+          <p id="position-status" class="status" role="status" aria-live="polite"></p>
+
+          <p class="disclaimer">
+            <strong>Suggest targets</strong> fills the two boxes from your own data — the average of the prices you
+            have scanned for that ticker, or your approved BUY decisions, or your average cost — with a band taken
+            from how much those scans moved. It proposes; you still press Save. Tick <em>automatically</em> and every
+            later scan of that ticker refreshes them for you.
+          </p>
+
+          <div class="table-wrap">
+            <table id="portfolio-table">
+              <thead>
+                <tr><th>Ticker</th><th>Shares</th><th>Avg cost</th><th>Buy below</th><th>Sell above</th><th>Auto</th><th></th></tr>
+              </thead>
+              <tbody id="portfolio-body"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section id="registry" class="card">
+          <header class="card-head">
+            <div>
+              <h2>Healed selectors</h2>
+              <p class="card-sub">Selectors the agent rewrote after a page changed. Reset to fall back to the shipped defaults.</p>
+            </div>
+          </header>
+          <ul id="registry-list" class="mono lines"></ul>
+          <footer class="card-foot">
+            <button id="reset-registry" class="btn danger small" type="button">Reset healed selectors</button>
+            <span class="hint">Safe to do: anything still broken is simply repaired again on the next scan.</span>
+          </footer>
+        </section>
+
+        <section id="repairs" class="card">
+          <header class="card-head">
+            <div>
+              <h2>Repair log</h2>
+              <p class="card-sub">Every repair the agent attempted, newest first — including the ones that failed.</p>
+            </div>
+          </header>
+          <ul id="heal-log" class="mono lines"></ul>
+        </section>
+      </main>
+    </div>
+
     <script type="module" src="options.js"></script>
   </body>
 </html>

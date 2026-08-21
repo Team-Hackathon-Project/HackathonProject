@@ -7,7 +7,7 @@
  * rule that the injected content script must not be a module.
  */
 import { readFileSync, existsSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import path from 'node:path';
 import { PROVIDER_HOSTS } from '../src/lib/providers.js';
 
@@ -145,7 +145,11 @@ export function validate() {
   return problems;
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+// `file://${argv[1]}` never matches on Windows: argv[1] arrives with drive
+// letters and backslashes, while import.meta.url is a slash-separated URL with
+// three slashes. The naive comparison made `npm run lint` a silent no-op here -
+// no output, and exit 0 whatever the state of the bundle.
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const problems = validate();
   if (problems.length) {
     console.error(`✖ ${problems.length} problem(s):`);

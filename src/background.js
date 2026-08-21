@@ -10,15 +10,16 @@
  * the top level so it survives a restart.
  */
 import {
-  MSG, OFFSCREEN_TARGET, OFFSCREEN_PATH, FIELDS, SNIPPET_LIMIT,
+  MSG, OFFSCREEN_TARGET, OFFSCREEN_PATH, FIELDS, SNIPPET_LIMIT, FIELD_LABELS, FIELD_PHRASES, HEALABLE_FIELDS,
 } from './lib/constants.js';
 import { candidatesFor, isPlausibleSelector } from './lib/selectors.js';
-import { buildSnapshot, isUsableSnapshot, valueFitsField } from './lib/normalize.js';
+import { buildSnapshot, isUsableSnapshot, valueFitsField, tickerFromUrl } from './lib/normalize.js';
+import { findStuckPrice } from './lib/verify.js';
 import { activeLlm, providerFor } from './lib/providers.js';
 import { heuristicAdvice, validateAdvice, buildAdvisoryContext } from './lib/advisor.js';
-import { healSelector, requestAdvice, LlmError, pingProvider } from './lib/llm.js';
+import { healSelector, requestAdvice, LlmError, pingProvider, humanizeLlmError } from './lib/llm.js';
 import {
-  getSettings, getPortfolio, getRegistry, recordHealedSelector, clearRegistry,
+  getSettings, getPortfolio, getRegistry, recordHealedSelector, clearRegistry, forgetHealedSelector,
   saveSnapshot, getSnapshots, recordDecision, getDecisions, recordHealEvent, getHealLog,
   recordPricePoint, getPriceHistory, savePosition,
 } from './lib/storage.js';
@@ -181,6 +182,9 @@ async function buildCandidateMap(host, registry) {
 /** Thrown when retrying would be pointless: the answer will not change. */
 class TerminalHealError extends Error {}
 
+const labelFor = (field) => FIELD_LABELS[field] || field;
+const phraseFor = (field) => FIELD_PHRASES[field] || field;
+
 /**
  * One repair round trip: ask, sanity-check, validate in the live page, persist.
  * Throws on failure so the caller can decide whether another attempt is worth
@@ -282,9 +286,14 @@ export async function scrapeActiveTab() {
   const host = hostOf(tab.url);
   const candidates = await buildCandidateMap(host, registry);
 
+  // The ticker in the URL is the most reliable thing we know about the page
+  // before reading it, and the content script uses it to tell this instrument's
+  // quote apart from the other instruments a page happens to list.
+  let anchorText = tickerFromUrl(tab.url);
+
   let result = await sendToTab(tab.id, {
     type: MSG.EXTRACT,
-    payload: { candidates, snippetLimit: SNIPPET_LIMIT },
+    payload: { candidates, snippetLimit: SNIPPET_LIMIT, anchorText },
   });
   if (!result || !result.ok) {
     throw new Error((result && result.error) || 'The page did not respond to the extraction request.');
@@ -298,7 +307,7 @@ export async function scrapeActiveTab() {
     const hostCandidates = await buildCandidateMap(result.host, registry);
     const retry = await sendToTab(tab.id, {
       type: MSG.EXTRACT,
-      payload: { candidates: hostCandidates, snippetLimit: SNIPPET_LIMIT },
+      payload: { candidates: hostCandidates, snippetLimit: SNIPPET_LIMIT, anchorText },
     });
     if (retry && retry.ok) {
       result = retry;
@@ -306,10 +315,14 @@ export async function scrapeActiveTab() {
     }
   }
 
+  anchorText = anchorText || tickerFromUrl(result.url);
+
   const raw = { ...result.raw };
   const used = { ...result.used };
   const healed = [];
   const warnings = [];
+  // Notices are not failures: they record what this page simply does not show.
+  const notices = [];
   const failures = [...(result.failures || [])];
 
   // A selector can match a real node and still hand back the wrong kind of
@@ -329,7 +342,7 @@ export async function scrapeActiveTab() {
       if (!remaining.length) { current = null; break; }
       const next = await sendToTab(tab.id, {
         type: MSG.EXTRACT,
-        payload: { candidates: { [field]: remaining }, snippetLimit: SNIPPET_LIMIT },
+        payload: { candidates: { [field]: remaining }, snippetLimit: SNIPPET_LIMIT, anchorText },
       });
       const nextValue = next && next.ok ? next.raw[field] : null;
       current = nextValue === null || nextValue === undefined
@@ -345,7 +358,7 @@ export async function scrapeActiveTab() {
 
     const container = await sendToTab(tab.id, {
       type: MSG.CAPTURE_CONTAINER,
-      payload: { field, snippetLimit: SNIPPET_LIMIT },
+      payload: { field, snippetLimit: SNIPPET_LIMIT, anchorText },
     });
     failures.push({
       field,
@@ -356,11 +369,29 @@ export async function scrapeActiveTab() {
     raw[field] = null;
     delete used[field];
   }
-  if (failures.length && settings.selfHealEnabled && activeLlm(settings).apiKey) {
+  // Not every miss is a fault worth a model call.
+  //
+  //   - The URL usually names the instrument, so a ticker the DOM withheld is
+  //     already recovered and there is nothing to repair.
+  //   - An empty container means the content script found no text of that shape
+  //     anywhere on the page. Plenty of quote pages carry no volume and no
+  //     headlines; asking the model can only cost a call to be told the same.
+  const urlTicker = tickerFromUrl(result.url) || anchorText;
+  const repairable = [];
+  for (const failure of failures) {
+    if (failure.field === 'ticker' && urlTicker) continue;
+    if (!HEALABLE_FIELDS.includes(failure.field) || !failure.snippet) {
+      notices.push(`This page does not show ${phraseFor(failure.field)}.`);
+      continue;
+    }
+    repairable.push(failure);
+  }
+
+  if (repairable.length && settings.selfHealEnabled && activeLlm(settings).apiKey) {
     try {
       // Heal sequentially: each call is a separate LLM round trip and the
       // failures are usually correlated (one layout change breaks several).
-      for (const failure of failures) {
+      for (const failure of repairable) {
         const outcome = await healField({
           tabId: tab.id,
           host: result.host || host,
@@ -374,7 +405,10 @@ export async function scrapeActiveTab() {
           used[failure.field] = outcome.used;
           healed.push({ field: failure.field, selector: outcome.used.selector, strategy: outcome.used.strategy });
         } else {
-          warnings.push(`Could not heal "${failure.field}": ${outcome.error}`);
+          // The raw provider text is kept in the repair log; the banner gets
+          // the version a person can act on.
+          const why = humanizeLlmError(outcome.error, activeLlm(settings).provider.label);
+          warnings.push(`Could not repair the ${labelFor(failure.field)}: ${why}`);
         }
       }
     } finally {
@@ -382,12 +416,14 @@ export async function scrapeActiveTab() {
       // offscreen document per extension, so hand it back.
       await closeOffscreen();
     }
-  } else if (failures.length) {
-    const reason = !activeLlm(settings).apiKey ? 'no API key configured' : 'self-healing is disabled in options';
-    for (const failure of failures) {
+  } else if (repairable.length) {
+    const reason = !activeLlm(settings).apiKey
+      ? 'automatic repair needs an API key'
+      : 'automatic repair is switched off';
+    for (const failure of repairable) {
       warnings.push(failure.mismatch
-        ? `Ignored "${failure.field}": the page returned "${failure.mismatch}" (${reason}).`
-        : `Missing "${failure.field}" (${reason}).`);
+        ? `Ignored the ${labelFor(failure.field)}: the page returned "${failure.mismatch}" (${reason}).`
+        : `Could not read the ${labelFor(failure.field)} (${reason}).`);
     }
   }
 
@@ -401,6 +437,26 @@ export async function scrapeActiveTab() {
     selectors_used: selectorsUsed,
   });
 
+  // A repaired selector can resolve, hold a number of exactly the right shape,
+  // and still be reading something that belongs to the page rather than to the
+  // instrument — an index tile in a market-summary rail is the classic case.
+  // Nothing about one scan gives that away; two do, because every ticker on the
+  // host reports the identical figure. When that happens the price is dropped
+  // and the selector behind it is forgotten, so the next scan repairs it again
+  // instead of serving the same wrong number forever.
+  const stuck = findStuckPrice({ snapshot, snapshots: await getSnapshots() });
+  if (stuck) {
+    const wasHealed = used.price && used.price.source === 'healed';
+    if (wasHealed) await forgetHealedSelector(stuck.host, 'price');
+    warnings.push(
+      `Discarded the price: ${stuck.host} reported the same ${stuck.price} for ${snapshot.ticker} `
+      + `and for ${stuck.ticker}, so it is a figure belonging to the page, not to this stock`
+      + `${wasHealed ? ' — the repaired selector has been reset' : ''}.`
+    );
+    snapshot.current_price = null;
+    delete snapshot.selectors_used.price_selector;
+  }
+
   let targets = null;
   if (isUsableSnapshot(snapshot)) {
     await saveSnapshot(snapshot);
@@ -408,8 +464,13 @@ export async function scrapeActiveTab() {
     // over, so record it before recomputing anything from it.
     await recordPricePoint(snapshot);
     targets = await refreshAutoTargets(snapshot);
-  } else {
-    warnings.push('Could not recover both a ticker and a price, so this snapshot was not saved.');
+  } else if (!stuck) {
+    // Name what was actually missing: "could not read both" is wrong half the
+    // time, and the half it is wrong about is the half the user can act on.
+    const missing = [];
+    if (!snapshot.ticker) missing.push(labelFor('ticker'));
+    if (!Number.isFinite(snapshot.current_price)) missing.push(labelFor('price'));
+    warnings.push(`Could not read the ${missing.join(' or the ')} on this page, so nothing was saved.`);
   }
 
   return {
@@ -418,6 +479,7 @@ export async function scrapeActiveTab() {
     healed,
     targets,
     warnings,
+    notices,
     failedFields: failures.map((failure) => failure.field),
     host: result.host || host,
     title: result.title,
@@ -496,7 +558,8 @@ export async function adviseOn(snapshot) {
   } catch (error) {
     const message = String((error && error.message) || error);
     console.warn('[market-scraper] LLM advice failed, using heuristic:', message);
-    return { ...fallback, note: `LLM advice unavailable (${message}). Showing the rules-based signal.` };
+    const why = humanizeLlmError(message, llm.provider.label);
+    return { ...fallback, note: `${why} Showing the rules-based signal instead.` };
   }
 }
 

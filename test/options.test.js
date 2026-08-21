@@ -213,3 +213,34 @@ test('the key field reports its length, so a truncated paste is visible', async 
   assert.equal(el('key-length').textContent, '(14 characters)', 'surrounding whitespace is not counted');
   assert.equal(el('key-length').textContent.includes('gsk_'), false, 'the key itself is never shown');
 });
+
+test('the rail says whether the agent can actually reach a model', async () => {
+  el('api-key').value = '';
+  el('api-key').dispatchEvent(new window.Event('input'));
+  assert.match(el('agent-state').textContent, /No key/);
+
+  el('api-key').value = 'gsk_something';
+  el('api-key').dispatchEvent(new window.Event('input'));
+  assert.match(el('agent-state').textContent, /Key set/);
+});
+
+test('an edit is flagged as unsaved until it is saved', async () => {
+  assert.equal(el('settings-dirty').classList.contains('hidden'), false, 'the edit above is still pending');
+
+  click('save-settings');
+  await settle();
+  assert.equal(el('settings-dirty').classList.contains('hidden'), true, 'saving clears the marker');
+});
+
+test('each provider links to the page its key comes from', async () => {
+  const select = el('provider');
+  select.value = 'anthropic';
+  select.dispatchEvent(new window.Event('change'));
+  await settle();
+  assert.equal(el('key-link').getAttribute('href'), 'https://console.anthropic.com');
+
+  select.value = 'groq';
+  select.dispatchEvent(new window.Event('change'));
+  await settle();
+  assert.equal(el('key-link').getAttribute('href'), 'https://console.groq.com/keys');
+});

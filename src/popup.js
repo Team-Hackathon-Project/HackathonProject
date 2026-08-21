@@ -19,6 +19,9 @@ const ui = {
   status: el('status'),
   context: el('context-line'),
   options: el('options-btn'),
+  empty: el('empty-state'),
+  setupCard: el('setup-card'),
+  setupBtn: el('setup-btn'),
   snapshotCard: el('snapshot-card'),
   ticker: el('snapshot-title'),
   price: el('snapshot-price'),
@@ -32,6 +35,7 @@ const ui = {
   healBanner: el('heal-banner'),
   targetsLine: el('targets-line'),
   warnBanner: el('warn-banner'),
+  noticeBanner: el('notice-banner'),
   adviceCard: el('advice-card'),
   action: el('advice-action'),
   bar: el('advice-bar'),
@@ -56,6 +60,8 @@ const ui = {
 let currentSnapshot = null;
 let currentAdvice = null;
 let pendingConfirm = null;
+/** The element focus should return to once the confirmation modal closes. */
+let lastFocused = null;
 
 /** Sends a request to the service worker and unwraps the {ok,data} envelope. */
 function request(type, payload) {
@@ -85,6 +91,16 @@ function setStatus(text, isError = false) {
 
 function show(node, visible) {
   node.classList.toggle('hidden', !visible);
+}
+
+/**
+ * Flips a boolean flag on <body>. The stylesheet keys the activity rail, the
+ * pulsing mark and the verdict wash off these, so the visual state of the whole
+ * panel follows the agent's state without any element-by-element bookkeeping.
+ */
+function setFlag(name, value) {
+  if (value === null || value === false) delete document.body.dataset[name];
+  else document.body.dataset[name] = String(value);
 }
 
 function replaceList(node, items, render) {
@@ -124,6 +140,8 @@ function renderSnapshot(snapshot) {
   replaceList(ui.selectors, selectors, ([key, value]) => li(`${key}: ${value}`));
 
   show(ui.snapshotCard, true);
+  // The primer has served its purpose once there is real data on screen.
+  show(ui.empty, false);
 }
 
 function renderAdvice(advice) {
@@ -138,6 +156,10 @@ function renderAdvice(advice) {
     ? `${advice.provider_label || 'Model'} (${advice.model || 'model'})`
     : 'Local rules engine';
   ui.source.textContent = advice.note ? `${origin} — ${advice.note}` : origin;
+
+  // Tints the top of the panel in the verdict's hue, so the call registers
+  // peripherally before it is read.
+  setFlag('verdict', advice.action);
 
   show(ui.overridePanel, false);
   show(ui.adviceCard, true);
@@ -172,32 +194,48 @@ function renderTargets(targets) {
   show(ui.targetsLine, Boolean(targets && targets.applied));
 }
 
-function renderBanners(healed, warnings) {
-  const healedList = healed || [];
-  if (healedList.length) {
-    ui.healBanner.replaceChildren();
-    const title = document.createElement('div');
-    title.textContent = `Self-healed ${healedList.length} selector${healedList.length > 1 ? 's' : ''}:`;
-    const list = document.createElement('ul');
-    for (const item of healedList) list.appendChild(li(`${item.field} → ${item.selector}`));
-    ui.healBanner.append(title, list);
+/** Fills one banner with a title and a list, or hides it when there is nothing. */
+function renderBanner(node, title, items) {
+  const list = items || [];
+  if (list.length) {
+    node.replaceChildren();
+    const heading = document.createElement('div');
+    heading.className = 'banner-title';
+    heading.textContent = typeof title === 'function' ? title(list) : title;
+    const body = document.createElement('ul');
+    for (const item of list) body.appendChild(li(item));
+    node.append(heading, body);
   }
-  show(ui.healBanner, healedList.length > 0);
+  show(node, list.length > 0);
+}
 
-  const warnList = warnings || [];
-  if (warnList.length) {
-    ui.warnBanner.replaceChildren();
-    const list = document.createElement('ul');
-    for (const item of warnList) list.appendChild(li(item));
-    ui.warnBanner.append(list);
-  }
-  show(ui.warnBanner, warnList.length > 0);
+/**
+ * Three separate things get told apart here, because they ask different things
+ * of the reader:
+ *
+ *   healed  — the agent fixed something by itself. Good news.
+ *   warned  — something went wrong and a number may be missing. Act on it.
+ *   noticed — this page simply does not carry that field. Nothing to do.
+ *
+ * Lumping the third in with the second is what makes a working scan look
+ * broken, so it gets its own quiet banner.
+ */
+function renderBanners(healed, warnings, notices) {
+  const healedList = healed || [];
+  renderBanner(
+    ui.healBanner,
+    (list) => `Self-healed ${list.length} selector${list.length > 1 ? 's' : ''}:`,
+    healedList.map((item) => `${item.field} → ${item.selector}`)
+  );
+  renderBanner(ui.warnBanner, 'Needs your attention', warnings || []);
+  renderBanner(ui.noticeBanner, 'Not on this page', notices || []);
 }
 
 /** Opens the confirmation modal; resolves the stored callback on confirm. */
 function confirmAction(summary, onConfirm) {
   ui.modalBody.textContent = summary;
   pendingConfirm = onConfirm;
+  lastFocused = document.activeElement;
   show(ui.modal, true);
   ui.modalConfirm.focus();
 }
@@ -205,6 +243,9 @@ function confirmAction(summary, onConfirm) {
 function closeModal() {
   pendingConfirm = null;
   show(ui.modal, false);
+  // Keyboard users land back on the button they opened the dialog from.
+  if (lastFocused && typeof lastFocused.focus === 'function') lastFocused.focus();
+  lastFocused = null;
 }
 
 async function logDecision(verdict, finalAction, note) {
@@ -228,6 +269,8 @@ async function logDecision(verdict, finalAction, note) {
 
 async function runScrape() {
   ui.scrape.disabled = true;
+  setFlag('busy', '1');
+  setFlag('verdict', null);
   setStatus('Reading the active tab…');
   show(ui.adviceCard, false);
   try {
@@ -236,7 +279,7 @@ async function runScrape() {
     ui.context.textContent = result.host || 'Self-healing scraper';
     renderSnapshot(result.snapshot);
     renderTargets(result.targets);
-    renderBanners(result.healed, result.warnings);
+    renderBanners(result.healed, result.warnings, result.notices);
 
     if (!result.usable) {
       setStatus('Could not read a ticker and price from this page.', true);
@@ -249,6 +292,7 @@ async function runScrape() {
   } catch (error) {
     setStatus(error.message, true);
   } finally {
+    setFlag('busy', null);
     ui.scrape.disabled = false;
   }
 }
@@ -256,6 +300,8 @@ async function runScrape() {
 ui.scrape.addEventListener('click', runScrape);
 
 ui.options.addEventListener('click', () => chrome.runtime.openOptionsPage());
+
+ui.setupBtn.addEventListener('click', () => chrome.runtime.openOptionsPage());
 
 ui.approve.addEventListener('click', () => {
   if (!currentAdvice) return;
@@ -304,8 +350,25 @@ ui.modal.addEventListener('click', (event) => {
   if (event.target === ui.modal) closeModal();
 });
 
+/**
+ * While the confirmation dialog is up it is the only thing on screen that
+ * should be reachable: it is `aria-modal`, and a Tab that wandered back into
+ * the page behind it would let someone approve a trade they cannot see.
+ */
 document.addEventListener('keydown', (event) => {
-  if (event.key === 'Escape' && !ui.modal.classList.contains('hidden')) closeModal();
+  if (ui.modal.classList.contains('hidden')) return;
+
+  if (event.key === 'Escape') {
+    closeModal();
+    return;
+  }
+  if (event.key !== 'Tab') return;
+
+  const stops = [ui.modalCancel, ui.modalConfirm];
+  const here = stops.indexOf(document.activeElement);
+  const next = (here + (event.shiftKey ? -1 : 1) + stops.length) % stops.length;
+  event.preventDefault();
+  stops[next].focus();
 });
 
 /** Restores the last snapshot for the active host so the popup opens warm. */
@@ -313,9 +376,9 @@ document.addEventListener('keydown', (event) => {
   try {
     const state = await request(MSG.GET_STATE);
     renderDecisions(state.decisions);
-    if (!state.hasApiKey) {
-      setStatus('No API key set — self-healing is off and advice falls back to local rules.');
-    }
+    // A missing key is a thing to *do*, not a thing to read, so it gets a card
+    // with a button rather than a line of grey text above the fold.
+    show(ui.setupCard, !state.hasApiKey);
   } catch (error) {
     setStatus(error.message, true);
   }

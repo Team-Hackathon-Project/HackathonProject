@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { makePage, loadContentScript } from './helpers.mjs';
 import { candidatesFor } from '../src/lib/selectors.js';
 import { FIELDS, SNIPPET_LIMIT } from '../src/lib/constants.js';
-import { HEALTHY_PAGE, BROKEN_PAGE, EMPTY_PAGE } from './fixtures/pages.mjs';
+import { HEALTHY_PAGE, BROKEN_PAGE, EMPTY_PAGE, INDEX_RAIL_PAGE } from './fixtures/pages.mjs';
 
 function candidateMap(host, registry = {}) {
   const map = {};
@@ -134,5 +134,48 @@ test('the snippet is capped at the requested limit', async () => {
     for (const failure of result.failures) {
       assert.ok(failure.snippet.length <= 120 + 20, `snippet too long: ${failure.snippet.length}`);
     }
+  });
+});
+
+
+test('a price inside a rail of other instruments is never taken for this one', async () => {
+  const url = 'https://www.google.com/finance/quote/AAPL:NASDAQ';
+  await withPage(INDEX_RAIL_PAGE, url, async (_page, script) => {
+    const result = await script.send({
+      type: 'EXTRACT',
+      payload: { candidates: candidateMap('www.google.com'), snippetLimit: SNIPPET_LIMIT, anchorText: 'AAPL' },
+    });
+
+    assert.equal(result.raw.price, null, 'an index level is not this stock price');
+    assert.equal(result.raw.change_percentage, null);
+
+    // And there is nothing worth sending to the model: every price-shaped
+    // string on the page belongs to a different instrument.
+    const priceFailure = result.failures.find((failure) => failure.field === 'price');
+    assert.ok(priceFailure, 'price should be reported as a miss');
+    assert.equal(priceFailure.snippet, '', 'no container should be offered for repair');
+  });
+});
+
+test('a selector aimed at a row of another instrument is refused', async () => {
+  const url = 'https://www.google.com/finance/quote/AAPL:NASDAQ';
+  await withPage(INDEX_RAIL_PAGE, url, async (_page, script) => {
+    const check = await script.send({
+      type: 'VALIDATE_SELECTOR',
+      payload: { field: 'price', selector: '.movers td + td', strategy: 'css' },
+    });
+    assert.equal(check.ok, false);
+    assert.match(check.error, /list of other instruments/);
+  });
+});
+
+test('a page with no volume at all offers no container to repair', async () => {
+  await withPage(EMPTY_PAGE, 'https://example.com/quote/AAPL', async (_page, script) => {
+    const result = await script.send({
+      type: 'CAPTURE_CONTAINER',
+      payload: { field: 'volume', snippetLimit: SNIPPET_LIMIT },
+    });
+    assert.equal(result.ok, false);
+    assert.match(result.error, /no container/);
   });
 });

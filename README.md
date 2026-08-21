@@ -47,6 +47,7 @@ src/
   background.js            Service worker: injection, healing loop, LLM calls, router
   content.js               Injected extractor (classic script — no ES imports)
   offscreen.html/.js       DOM parser for sanitizing scraped HTML off the active tab
+  theme.css                Design tokens and shared primitives for both pages
   popup.html/.css/.js      Dashboard: quote card, advisory card, approve/reject/override
   options.html/.css/.js    API key, model, portfolio targets, healed-selector registry
   icons/                   Generated PNGs (scripts/make-icons.mjs)
@@ -59,6 +60,7 @@ src/
     storage.js             Typed chrome.storage.local accessors
     llm.js                 Provider-agnostic client: structured output, retries, timeouts
     targets.js             Suggests buy/sell targets from your own scans and decisions
+    verify.js              Cross-scan checks that catch a page-global price
     providers.js           Anthropic and Groq wire formats, and the active-provider resolver
 scripts/
   validate.mjs             Static bundle validation (npm run lint)
@@ -68,13 +70,13 @@ e2e/
   harness.mjs              Shared browser plumbing (staging, popup driver)
   quote-page.mjs           Live-site run: scan → advise → approve → log
   self-healing.mjs         Deterministic repair run against a mangled page
-docs/
-  DEMO.md                  Three-minute demo script, with real screenshots
   provider-check.mjs       Confirms a provider answers from the service worker
   live-quote.mjs           Real key, live page: a genuine repair and advisory
   auto-targets.mjs         Target suggestion across repeated scans, offline
+docs/
+  DEMO.md                  Three-minute demo script, with real screenshots
   env.mjs                  Reads the gitignored .env the runs take keys from
-test/                      171 tests: node:test + jsdom
+test/                      197 tests: node:test + jsdom
 ```
 
 ## How the self-healing loop works
@@ -158,7 +160,7 @@ Advisory output:
 ## Commands
 
 ```bash
-npm run check     # static validation + the full test suite (171 tests)
+npm run check     # static validation + the full test suite (197 tests)
 npm run package   # dist/self-healing-market-scraper-<version>.zip
 npm run e2e       # drive the real extension in a real browser, live site
                   #   EXT_SOURCE=dist/extension npm run e2e  tests the built copy
@@ -198,6 +200,13 @@ screenshots to `e2e/shots/`. Both e2e scripts run from a throwaway copy of the
 extension with `host_permissions` widened for the site under test: `activeTab`
 is only granted by a human clicking the toolbar icon, and no automation protocol
 can produce that click. The shipped manifest keeps its narrow permission set.
+
+Chrome 137 and later ignore `--load-extension`, so an up-to-date Chrome starts
+cleanly with no extension in it. The harness detects that — it waits for the
+service worker and moves on to the next installed browser (Edge, Chromium) if it
+never appears — and prints which browser it settled on. `BROWSER_PATH=…` pins
+one explicitly, in which case no fallback is attempted. None of this affects the
+extension itself: Chrome installs it normally through **Load unpacked**.
 
 ## Suggested targets
 

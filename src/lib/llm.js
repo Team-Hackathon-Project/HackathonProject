@@ -174,7 +174,11 @@ export async function healSelector({ field, host, snippet, previousSelector, fee
     provider,
     model,
     apiKey,
-    maxTokens: 4096,
+    // A selector plus one sentence of justification, with room for the model to
+    // reason over the fragment first. `max_tokens` is a reservation, not a
+    // bill: providers count the whole reservation against a per-minute token
+    // budget, so an oversized one can make the call impossible to place at all.
+    maxTokens: 3072,
     system: HEAL_SYSTEM,
     userContent,
     schema: SELECTOR_SCHEMA,
@@ -190,6 +194,39 @@ export async function healSelector({ field, host, snippet, previousSelector, fee
     confidence: Number.isFinite(Number(parsed.confidence)) ? Number(parsed.confidence) : 0,
     reason: typeof parsed.reason === 'string' ? parsed.reason : '',
   };
+}
+
+/**
+ * Turns a provider's error into something worth showing a person.
+ *
+ * The raw text is accurate and unreadable: an HTTP status, an organisation id,
+ * a service tier, a billing link. It stays in the repair log, where debugging
+ * happens. What surfaces in the popup should say what went wrong and what to
+ * do about it — anything unrecognised is passed through untouched rather than
+ * flattened into a useless "something failed".
+ */
+export function humanizeLlmError(message, label = 'The model provider') {
+  const text = String((message && message.message) || message || '').trim();
+  if (!text) return 'The model did not answer.';
+
+  if (/\b(401|403)\b|invalid[ _-]?api[ _-]?key|authentication|unauthorized/i.test(text)) {
+    return `${label} rejected the API key. Check it in Settings.`;
+  }
+  if (/\b429\b|rate[ _-]?limit/i.test(text)) {
+    const retry = text.match(/try again in ([\d.]+)\s*s/i);
+    const wait = retry ? ` Try again in about ${Math.ceil(Number(retry[1]))} seconds.` : '';
+    return `${label} is rate limiting this key.${wait}`;
+  }
+  if (/\b413\b|too large|context length|maximum context/i.test(text)) {
+    return 'The request was too big for this model. Lower how much of the page is sent in Settings.';
+  }
+  if (/\b5\d\d\b|timed? ?out|network error|failed to fetch/i.test(text)) {
+    return `Could not reach ${label}. Check the connection and try again.`;
+  }
+  // Anything else is passed through, but made into a sentence so it can be
+  // dropped into a message without reading like a stack trace.
+  const capitalised = text.charAt(0).toUpperCase() + text.slice(1);
+  return /[.!?]$/.test(capitalised) ? capitalised : `${capitalised}.`;
 }
 
 const ADVICE_SYSTEM = [
@@ -218,7 +255,11 @@ export async function requestAdvice({ context, provider, model, apiKey, fetchImp
     provider,
     model,
     apiKey,
-    maxTokens: 8192,
+    // The rationale is capped at 120 words by the system prompt, so the answer
+    // is a few hundred tokens; the rest is reasoning headroom. Reserving 8192
+    // for it put a single advisory over Groq's 8000 tokens-per-minute free
+    // tier, which failed the request outright rather than merely slowing it.
+    maxTokens: 2048,
     system: ADVICE_SYSTEM,
     userContent,
     schema: ADVICE_SCHEMA,

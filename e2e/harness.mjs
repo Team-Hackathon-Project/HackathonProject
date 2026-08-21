@@ -39,11 +39,21 @@ const BROWSERS = [
   '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
 ].filter(Boolean);
 
+/**
+ * Every installed browser this machine could run the suite in, best first.
+ *
+ * An explicit `BROWSER_PATH` is taken as the only candidate: if someone names a
+ * browser, silently running a different one would make the result a lie.
+ */
+export function browserCandidates() {
+  if (process.env.BROWSER_PATH) return [process.env.BROWSER_PATH];
+  return BROWSERS.filter((candidate) => existsSync(candidate));
+}
+
 export function findBrowser() {
-  for (const candidate of BROWSERS) {
-    if (existsSync(candidate)) return candidate;
-  }
-  throw new Error('No Chrome/Chromium/Edge binary found. Set BROWSER_PATH to one.');
+  const [first] = browserCandidates();
+  if (!first) throw new Error('No Chrome/Chromium/Edge binary found. Set BROWSER_PATH to one.');
+  return first;
 }
 
 /**
@@ -67,15 +77,18 @@ export function stageExtension(hosts) {
 
 export const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-export async function launch(extensionDir, profileName) {
+function launchOne(executablePath, extensionDir, userDataDir) {
   return puppeteer.launch({
-    executablePath: findBrowser(),
+    executablePath,
     headless: false, // extensions do not load in the old headless mode
     protocolTimeout: 60000,
-    userDataDir: path.join(os.tmpdir(), `${profileName}-${process.pid}`),
+    userDataDir,
     args: [
       `--disable-extensions-except=${extensionDir}`,
       `--load-extension=${extensionDir}`,
+      // Chrome 136 put --load-extension behind this feature flag before
+      // dropping the switch outright. Harmless where it no longer applies.
+      '--disable-features=DisableLoadExtensionCommandLineSwitch',
       '--no-first-run',
       '--no-default-browser-check',
       '--window-size=1100,860',
@@ -84,6 +97,45 @@ export async function launch(extensionDir, profileName) {
       '--disable-renderer-backgrounding',
     ],
   });
+}
+
+/**
+ * Launches a browser with the extension loaded, and proves it actually loaded.
+ *
+ * Chrome 137 removed the `--load-extension` switch, so on an up-to-date Chrome
+ * the browser starts perfectly and the extension is simply absent — every
+ * later step then fails with an unrelated timeout. This waits for the service
+ * worker to appear and moves on to the next installed browser if it does not,
+ * so the suite keeps running on Edge or Chromium instead of failing obscurely.
+ */
+export async function launch(extensionDir, profileName) {
+  const candidates = browserCandidates();
+  if (!candidates.length) throw new Error('No Chrome/Chromium/Edge binary found. Set BROWSER_PATH to one.');
+
+  const refused = [];
+  for (const [index, executablePath] of candidates.entries()) {
+    const userDataDir = path.join(os.tmpdir(), `${profileName}-${process.pid}-${index}`);
+    rmSync(userDataDir, { recursive: true, force: true });
+    const browser = await launchOne(executablePath, extensionDir, userDataDir);
+    try {
+      await browser.waitForTarget(
+        (t) => t.type() === 'service_worker' && t.url().includes('background.js'),
+        { timeout: 15000 },
+      );
+      if (refused.length) console.log(`[e2e] using ${executablePath}`);
+      return browser;
+    } catch {
+      refused.push(executablePath);
+      await browser.close().catch(() => {});
+    }
+  }
+
+  throw new Error([
+    'None of these browsers loaded the unpacked extension:',
+    ...refused.map((candidate) => `  ${candidate}`),
+    'Chrome 137 and later ignore --load-extension. Install Edge or Chromium,',
+    'or point BROWSER_PATH at a browser that still honours the switch.',
+  ].join('\n'));
 }
 
 export async function serviceWorker(browser) {

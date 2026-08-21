@@ -45,6 +45,34 @@ export const FIELDS = ['ticker', 'price', 'change_percentage', 'volume', 'news']
 /** Fields that must be present for a snapshot to be considered usable. */
 export const REQUIRED_FIELDS = ['ticker', 'price'];
 
+/** How each field is named when the extension talks to the user about it. */
+export const FIELD_LABELS = {
+  ticker: 'ticker symbol',
+  price: 'price',
+  change_percentage: 'daily change',
+  volume: 'volume',
+  news: 'headlines',
+};
+
+/**
+ * Fields worth spending a model call to repair.
+ *
+ * Headlines are deliberately absent. They are optional colour for the
+ * rationale, the pattern that locates them matches almost any prose on any
+ * page, and the repair therefore fires constantly and usually fails — one call
+ * spent per scan, and a warning, for something the advisory does not need.
+ */
+export const HEALABLE_FIELDS = ['ticker', 'price', 'change_percentage', 'volume'];
+
+/** The same names as a noun phrase, for sentences that need an article. */
+export const FIELD_PHRASES = {
+  ticker: 'a ticker symbol',
+  price: 'a price',
+  change_percentage: 'a daily change',
+  volume: 'a volume figure',
+  news: 'any headlines',
+};
+
 /**
  * Credentials are held per provider so switching between them does not throw a
  * key away. `provider` selects which of them is in force; `activeLlm()` in

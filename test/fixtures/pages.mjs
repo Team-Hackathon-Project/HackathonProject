@@ -88,3 +88,31 @@ export const MISLEADING_ONLY_PAGE = `
     <div class="volume-label">Volume</div>
   </main>
 </body></html>`;
+
+
+/**
+ * The shape that produced the "every stock shows the same price" bug.
+ *
+ * Modelled on Google Finance as it actually renders to the extension: no
+ * `<main>`, the only `h1` is the site name, the instrument's own quote block is
+ * absent, and the sole price-shaped text on the page is a rail of index levels.
+ * A scraper that takes the first plausible number here reports the same index
+ * for every ticker it is ever pointed at.
+ */
+export const INDEX_RAIL_PAGE = `
+<!doctype html>
+<html><head><title>AAPL: Apple Inc - Google Finance</title></head>
+<body>
+  <header><h1>Finance</h1></header>
+  <div role="listbox" class="market-summary">
+    <div role="option"><span>Dow Jones</span><span>54,106.20</span></div>
+    <div role="option"><span>S&amp;P 500</span><span>7,318.44</span></div>
+    <div role="option"><span>Nasdaq</span><span>24,901.03</span></div>
+    <div role="option"><span>Russell</span><span>2,477.61</span></div>
+  </div>
+  <table class="movers">
+    <tr><td>NVDA</td><td>184.62</td></tr>
+    <tr><td>MSFT</td><td>484.45</td></tr>
+    <tr><td>TSLA</td><td>396.10</td></tr>
+  </table>
+</body></html>`;

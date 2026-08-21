@@ -7,7 +7,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { makeStorage, installChrome, uninstallChrome, stubFetch, messageResponse } from './helpers.mjs';
 import { MSG, STORAGE_KEYS } from '../src/lib/constants.js';
-import { HEALTHY_PAGE, BROKEN_PAGE, MISLEADING_PAGE, MISLEADING_ONLY_PAGE } from './fixtures/pages.mjs';
+import { HEALTHY_PAGE, BROKEN_PAGE, MISLEADING_PAGE, MISLEADING_ONLY_PAGE, INDEX_RAIL_PAGE } from './fixtures/pages.mjs';
 import { makePage, loadContentScript } from './helpers.mjs';
 
 let background;
@@ -188,7 +188,7 @@ test('a selector the model invents but the page rejects is never persisted', asy
 
   const result = await background.scrapeActiveTab();
   assert.deepEqual(result.healed, []);
-  assert.ok(result.warnings.some((warning) => /Could not heal "price"/.test(warning)));
+  assert.ok(result.warnings.some((warning) => /Could not repair the price/.test(warning)));
   const registry = (await storage.local.get(STORAGE_KEYS.SELECTORS))[STORAGE_KEYS.SELECTORS];
   assert.equal(registry, undefined);
 });
@@ -215,7 +215,7 @@ test('a field with only a junk match is reported, not invented', async () => {
   const result = await background.scrapeActiveTab();
 
   assert.equal(result.snapshot.volume, null);
-  assert.ok(result.warnings.some((warning) => /Ignored "volume".*"Volume"/.test(warning)));
+  assert.ok(result.warnings.some((warning) => /Ignored the volume.*"Volume"/.test(warning)));
   assert.equal(result.snapshot.selectors_used.volume_selector, undefined);
   assert.equal(result.usable, true); // ticker + price still recovered
 });
@@ -342,7 +342,7 @@ test('without an API key the scrape degrades instead of failing', async () => {
   assert.equal(result.snapshot.ticker, 'AAPL'); // recovered from the h1 / URL
   assert.equal(result.snapshot.current_price, null);
   assert.equal(result.usable, false);
-  assert.ok(result.warnings.some((warning) => /no API key configured/.test(warning)));
+  assert.ok(result.warnings.some((warning) => /automatic repair needs an API key/.test(warning)));
 });
 
 test('advice falls back to the rules engine when the model output is malformed', async () => {
@@ -357,7 +357,8 @@ test('advice falls back to the rules engine when the model output is malformed',
   const advice = await background.adviseOn({ ticker: 'AAPL', current_price: 224.5, currency: 'USD', change_value: 1.8, news: [] });
   assert.equal(advice.source, 'heuristic');
   assert.equal(advice.action, 'SELL');
-  assert.match(advice.note, /LLM advice unavailable/);
+  assert.match(advice.note, /failed schema validation\./);
+  assert.match(advice.note, /Showing the rules-based signal/);
   assert.equal(advice.user_action_required, true);
 });
 
@@ -525,4 +526,76 @@ test('the offscreen parser is opened once per scrape and handed back', async () 
   await background.scrapeActiveTab();
   assert.equal(chrome._calls.createDocument.length, 2);
   assert.equal(chrome._calls.closeDocument.length, 2);
+});
+
+
+test('a price the host reports for every ticker is discarded, not shown', async () => {
+  // The scan itself looks perfect: 224.50 parses, the selector resolved. What
+  // gives it away is that the same host already reported 224.50 for a
+  // different stock, so the number belongs to the page, not the instrument.
+  const url = 'https://finance.yahoo.com/quote/AAPL';
+  const storage = makeStorage({
+    [STORAGE_KEYS.SNAPSHOTS]: {
+      MSFT: { ticker: 'MSFT', current_price: 224.5, source_url: 'https://finance.yahoo.com/quote/MSFT' },
+    },
+  });
+  installChrome({ storage, tab: { url }, tabHandler: pageBackedTabHandler(HEALTHY_PAGE, url) });
+  globalThis.fetch = () => { throw new Error('the network must not be touched'); };
+
+  const result = await background.scrapeActiveTab();
+
+  assert.equal(result.snapshot.current_price, null, 'the page-global price must not be shown');
+  assert.equal(result.usable, false);
+  assert.equal(result.snapshot.selectors_used.price_selector, undefined);
+  assert.ok(result.warnings.some((warning) => /belonging to the page, not to this stock/.test(warning)));
+  assert.ok(result.warnings.some((warning) => /MSFT/.test(warning)), 'the clash should name the other ticker');
+
+  const saved = (await storage.local.get(STORAGE_KEYS.SNAPSHOTS))[STORAGE_KEYS.SNAPSHOTS];
+  assert.equal(saved.AAPL, undefined, 'an unusable snapshot is not stored');
+});
+
+test('the healed selector behind a page-global price is forgotten', async () => {
+  const url = 'https://finance.yahoo.com/quote/AAPL';
+  const storage = makeStorage({
+    [STORAGE_KEYS.SELECTORS]: {
+      'finance.yahoo.com': {
+        price: { selector: '[data-testid="qsp-price"]', strategy: 'css', source: 'healed', healed_at: 'earlier' },
+        volume: { selector: 'fin-streamer', strategy: 'css', source: 'healed', healed_at: 'earlier' },
+      },
+    },
+    [STORAGE_KEYS.SNAPSHOTS]: {
+      MSFT: { ticker: 'MSFT', current_price: 224.5, source_url: 'https://finance.yahoo.com/quote/MSFT' },
+    },
+  });
+  installChrome({ storage, tab: { url }, tabHandler: pageBackedTabHandler(HEALTHY_PAGE, url) });
+  globalThis.fetch = () => { throw new Error('the network must not be touched'); };
+
+  const result = await background.scrapeActiveTab();
+
+  assert.ok(result.warnings.some((warning) => /repaired selector has been reset/.test(warning)));
+  const registry = (await storage.local.get(STORAGE_KEYS.SELECTORS))[STORAGE_KEYS.SELECTORS];
+  assert.equal(registry['finance.yahoo.com'].price, undefined, 'the bad repair is dropped');
+  assert.ok(registry['finance.yahoo.com'].volume, 'unrelated repairs are left alone');
+});
+
+test('a page that simply lacks a field says so instead of paying for a repair', async () => {
+  // Google Finance as the extension actually sees it: no instrument block, an
+  // h1 reading "Finance", and nothing but other instruments to look at.
+  const url = 'https://www.google.com/finance/quote/AAPL:NASDAQ';
+  const storage = makeStorage({ [STORAGE_KEYS.SETTINGS]: { providers: { anthropic: { apiKey: 'sk-ant-test' } } } });
+  installChrome({ storage, tab: { url }, tabHandler: pageBackedTabHandler(INDEX_RAIL_PAGE, url) });
+  const fetchImpl = stubFetch(messageResponse({ selector: '.x', strategy: 'css', confidence: 0.9, reason: 'guess' }));
+  globalThis.fetch = fetchImpl;
+
+  const result = await background.scrapeActiveTab();
+
+  assert.equal(fetchImpl.calls.length, 0, 'nothing on this page is repairable, so nothing is asked');
+  assert.equal(result.snapshot.ticker, 'AAPL', 'the ticker still comes from the URL');
+  assert.equal(result.snapshot.current_price, null, 'no index level is passed off as a price');
+  assert.ok(
+    !result.warnings.some((warning) => /ticker/.test(warning)),
+    'a ticker recovered from the URL is not worth warning about'
+  );
+  assert.ok(result.notices.some((notice) => /does not show a price/.test(notice)));
+  assert.ok(result.notices.some((notice) => /does not show a volume figure/.test(notice)));
 });
