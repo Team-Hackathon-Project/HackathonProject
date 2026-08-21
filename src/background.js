@@ -20,7 +20,9 @@ import { healSelector, requestAdvice, LlmError, pingProvider } from './lib/llm.j
 import {
   getSettings, getPortfolio, getRegistry, recordHealedSelector, clearRegistry,
   saveSnapshot, getSnapshots, recordDecision, getDecisions, recordHealEvent, getHealLog,
+  recordPricePoint, getPriceHistory, savePosition,
 } from './lib/storage.js';
+import { suggestTargets } from './lib/targets.js';
 
 /** How far down the candidate list one bad match may push us. */
 const MAX_CANDIDATE_RETRIES = 4;
@@ -399,8 +401,13 @@ export async function scrapeActiveTab() {
     selectors_used: selectorsUsed,
   });
 
+  let targets = null;
   if (isUsableSnapshot(snapshot)) {
     await saveSnapshot(snapshot);
+    // Every usable scan is one more data point the target suggester can average
+    // over, so record it before recomputing anything from it.
+    await recordPricePoint(snapshot);
+    targets = await refreshAutoTargets(snapshot);
   } else {
     warnings.push('Could not recover both a ticker and a price, so this snapshot was not saved.');
   }
@@ -409,11 +416,40 @@ export async function scrapeActiveTab() {
     snapshot,
     usable: isUsableSnapshot(snapshot),
     healed,
+    targets,
     warnings,
     failedFields: failures.map((failure) => failure.field),
     host: result.host || host,
     title: result.title,
   };
+}
+
+/**
+ * Recomputes targets for a ticker the user has put on automatic.
+ *
+ * Opt-in per position, because silently rewriting someone's own thresholds
+ * would be the opposite of keeping them in charge. Returns what it wrote, or
+ * null when the position is manual or there is nothing to anchor on.
+ */
+async function refreshAutoTargets(snapshot) {
+  const portfolio = await getPortfolio();
+  const position = portfolio[snapshot.ticker];
+  if (!position || !position.auto_targets) return null;
+
+  const suggestion = suggestTargets({
+    snapshot,
+    history: await getPriceHistory(snapshot.ticker),
+    position,
+    decisions: await getDecisions(),
+  });
+  if (!suggestion) return null;
+
+  await savePosition(snapshot.ticker, {
+    target_buy_below: suggestion.target_buy_below,
+    target_sell_above: suggestion.target_sell_above,
+    targets_updated_at: new Date().toISOString(),
+  });
+  return { ...suggestion, applied: true };
 }
 
 /* ------------------------------------------------------------------ *
@@ -504,6 +540,22 @@ export async function handleRequest(message) {
     }
     case MSG.RESET_SELECTORS:
       return { registry: await clearRegistry() };
+    case MSG.SUGGEST_TARGETS: {
+      const ticker = String((message.payload && message.payload.ticker) || '').trim().toUpperCase();
+      if (!ticker) throw new Error('No ticker supplied.');
+      const portfolio = await getPortfolio();
+      const suggestion = suggestTargets({
+        ticker,
+        snapshot: (await getSnapshots())[ticker] || null,
+        history: await getPriceHistory(ticker),
+        position: portfolio[ticker] || {},
+        decisions: await getDecisions(),
+      });
+      if (!suggestion) {
+        throw new Error(`Nothing to go on for ${ticker} yet — scan it once, or enter an average cost.`);
+      }
+      return suggestion;
+    }
     case MSG.TEST_PROVIDER: {
       // Runs from the worker, with the real client — the same path a repair
       // takes. The payload lets the options page test a key before saving it.

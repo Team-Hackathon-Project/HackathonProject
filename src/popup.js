@@ -30,6 +30,7 @@ const ui = {
   news: el('snapshot-news'),
   selectors: el('snapshot-selectors'),
   healBanner: el('heal-banner'),
+  targetsLine: el('targets-line'),
   warnBanner: el('warn-banner'),
   adviceCard: el('advice-card'),
   action: el('advice-action'),
@@ -157,6 +158,20 @@ function renderDecisions(decisions) {
   });
 }
 
+/**
+ * Says so when a scan moved the user's own thresholds. Automatic targets are
+ * opt-in per position, but "opt-in" is not a licence to change someone's
+ * numbers quietly.
+ */
+function renderTargets(targets) {
+  if (targets && targets.applied) {
+    ui.targetsLine.textContent =
+      `Targets updated automatically: buy below ${targets.target_buy_below}, sell above ${targets.target_sell_above} `
+      + `(${targets.basis === 'history' ? `${targets.sample_size} scans` : targets.basis}).`;
+  }
+  show(ui.targetsLine, Boolean(targets && targets.applied));
+}
+
 function renderBanners(healed, warnings) {
   const healedList = healed || [];
   if (healedList.length) {
@@ -220,6 +235,7 @@ async function runScrape() {
     currentSnapshot = result.snapshot;
     ui.context.textContent = result.host || 'Self-healing scraper';
     renderSnapshot(result.snapshot);
+    renderTargets(result.targets);
     renderBanners(result.healed, result.warnings);
 
     if (!result.usable) {

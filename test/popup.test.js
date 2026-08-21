@@ -204,3 +204,27 @@ test('a service-worker error is shown instead of crashing the popup', async () =
   assert.equal(el('scrape-btn').disabled, false, 'the button must be re-enabled after a failure');
   globalThis.chrome.runtime.sendMessage = original;
 });
+
+test('an automatic target update is announced, never silent', async () => {
+  scrapeResult = {
+    ...scrapeResult,
+    targets: {
+      applied: true, basis: 'history', sample_size: 7,
+      target_buy_below: 92.93, target_sell_above: 107.07,
+    },
+  };
+  click('scrape-btn');
+  await settle();
+
+  assert.equal(el('targets-line').classList.contains('hidden'), false);
+  assert.match(el('targets-line').textContent, /buy below 92\.93/);
+  assert.match(el('targets-line').textContent, /sell above 107\.07/);
+  assert.match(el('targets-line').textContent, /7 scans/);
+});
+
+test('a manual position shows no targets line', async () => {
+  scrapeResult = { ...scrapeResult, targets: null };
+  click('scrape-btn');
+  await settle();
+  assert.equal(el('targets-line').classList.contains('hidden'), true);
+});

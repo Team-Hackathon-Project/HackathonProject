@@ -6,7 +6,7 @@ screenshot below is a real capture from a real browser run, not a mockup.
 ## Setup (before you present)
 
 ```bash
-npm install && npm run check     # 149 tests, static bundle validation
+npm install && npm run check     # 171 tests, static bundle validation
 ```
 
 Load it: `chrome://extensions` (or `edge://extensions`) → **Developer mode** →
@@ -96,7 +96,7 @@ the model id is never a guess.
 
 ## If you are asked "what have you actually verified?"
 
-- `npm run check` — 149 unit/integration tests plus static manifest and module
+- `npm run check` — 171 unit/integration tests plus static manifest and module
   graph validation.
 - Real browser runs (`npm run e2e`, `npm run e2e:heal`) against
   **finance.yahoo.com** (all five fields, no healing), **stockanalysis.com** and

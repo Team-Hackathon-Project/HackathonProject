@@ -92,6 +92,7 @@ async function renderPortfolio() {
       position.avg_cost ?? '—',
       position.target_buy_below ?? '—',
       position.target_sell_above ?? '—',
+      position.auto_targets ? 'auto' : 'manual',
     ];
     for (const value of cells) {
       const cell = document.createElement('td');
@@ -113,7 +114,7 @@ async function renderPortfolio() {
   if (!entries.length) {
     const row = document.createElement('tr');
     const cell = document.createElement('td');
-    cell.colSpan = 6;
+    cell.colSpan = 7;
     cell.textContent = 'No positions yet.';
     row.appendChild(cell);
     body.appendChild(row);
@@ -231,6 +232,25 @@ el('save-settings').addEventListener('click', async () => {
   setStatus(el('settings-status'), 'Settings saved.');
 });
 
+/** Fills the two target boxes from the worker's suggestion. Saves nothing. */
+el('suggest-targets').addEventListener('click', async () => {
+  const ticker = el('pos-ticker').value.trim().toUpperCase();
+  if (!/^[A-Z][A-Z0-9.\-]{0,9}$/.test(ticker)) {
+    setStatus(el('position-status'), 'Enter a ticker first, then ask for a suggestion.', true);
+    return;
+  }
+  setStatus(el('position-status'), 'Working it out…');
+  const response = await chrome.runtime.sendMessage({ type: MSG.SUGGEST_TARGETS, payload: { ticker } });
+  if (!response || !response.ok) {
+    setStatus(el('position-status'), (response && response.error) || 'Could not suggest targets.', true);
+    return;
+  }
+  const suggestion = response.data;
+  el('pos-buy').value = suggestion.target_buy_below;
+  el('pos-sell').value = suggestion.target_sell_above;
+  setStatus(el('position-status'), `${suggestion.note} Press Save position to keep them.`);
+});
+
 el('save-position').addEventListener('click', async () => {
   const ticker = el('pos-ticker').value.trim().toUpperCase();
   if (!/^[A-Z][A-Z0-9.\-]{0,9}$/.test(ticker)) {
@@ -242,8 +262,10 @@ el('save-position').addEventListener('click', async () => {
     avg_cost: numberOrNull(el('pos-cost').value),
     target_buy_below: numberOrNull(el('pos-buy').value),
     target_sell_above: numberOrNull(el('pos-sell').value),
+    auto_targets: el('pos-auto').checked,
   });
   for (const id of ['pos-ticker', 'pos-shares', 'pos-cost', 'pos-buy', 'pos-sell']) el(id).value = '';
+  el('pos-auto').checked = false;
   await renderPortfolio();
   setStatus(el('position-status'), `Saved ${ticker}.`);
 });

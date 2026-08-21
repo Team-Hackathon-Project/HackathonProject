@@ -102,3 +102,12 @@ body.options .ghost:hover {
   border-color: var(--accent);
   color: var(--accent);
 }
+
+body.options label.checkbox.inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: 12px;
+  white-space: nowrap;
+}

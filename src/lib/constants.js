@@ -15,6 +15,7 @@ export const MSG = {
   GET_STATE: 'GET_STATE',
   RESET_SELECTORS: 'RESET_SELECTORS',
   TEST_PROVIDER: 'TEST_PROVIDER',
+  SUGGEST_TARGETS: 'SUGGEST_TARGETS',
   // content -> background
   SELECTOR_FAILED: 'SELECTOR_FAILED',
   // background -> content
@@ -35,6 +36,7 @@ export const STORAGE_KEYS = {
   SETTINGS: 'settings',
   PORTFOLIO: 'portfolio',
   HEAL_LOG: 'heal_log',
+  PRICE_HISTORY: 'price_history',
 };
 
 /** Fields the scraper tries to extract from a quote page. */
@@ -63,4 +65,6 @@ export const DEFAULT_SETTINGS = {
 export const SNIPPET_LIMIT = 20000;
 
 export const MAX_DECISIONS = 200;
+/** Price points kept per ticker — enough to average over, small enough to store. */
+export const MAX_PRICE_POINTS = 60;
 export const MAX_HEAL_LOG = 100;

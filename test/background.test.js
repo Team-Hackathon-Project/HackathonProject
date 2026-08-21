@@ -386,6 +386,67 @@ test('advice on an unusable snapshot is refused', async () => {
   await assert.rejects(() => background.adviseOn({ ticker: null, current_price: null }), /without a ticker and a price/);
 });
 
+test('a position on automatic has its targets refreshed by a scan', async () => {
+  const url = 'https://finance.yahoo.com/quote/AAPL';
+  const storage = makeStorage({
+    [STORAGE_KEYS.PORTFOLIO]: { AAPL: { shares: 10, avg_cost: 200, auto_targets: true } },
+  });
+  installChrome({ storage, tab: { url }, tabHandler: pageBackedTabHandler(HEALTHY_PAGE, url) });
+  globalThis.fetch = () => { throw new Error('the network must not be touched'); };
+
+  const result = await background.scrapeActiveTab();
+
+  // One scan is not enough history, so it anchors on the 200 average cost.
+  assert.equal(result.targets.basis, 'cost');
+  assert.equal(result.targets.applied, true);
+  const portfolio = (await storage.local.get(STORAGE_KEYS.PORTFOLIO))[STORAGE_KEYS.PORTFOLIO];
+  assert.equal(portfolio.AAPL.target_buy_below, 190);
+  assert.equal(portfolio.AAPL.target_sell_above, 210);
+  assert.ok(portfolio.AAPL.targets_updated_at, 'the write is stamped');
+  assert.equal(portfolio.AAPL.shares, 10, 'the rest of the position is untouched');
+
+  const history = (await storage.local.get(STORAGE_KEYS.PRICE_HISTORY))[STORAGE_KEYS.PRICE_HISTORY];
+  assert.equal(history.AAPL.length, 1, 'the scan is kept as a price point');
+  assert.equal(history.AAPL[0].price, 224.5);
+});
+
+test('a manual position is never rewritten behind the back of whoever set it', async () => {
+  const url = 'https://finance.yahoo.com/quote/AAPL';
+  const storage = makeStorage({
+    [STORAGE_KEYS.PORTFOLIO]: { AAPL: { shares: 10, avg_cost: 200, target_buy_below: 1, target_sell_above: 999 } },
+  });
+  installChrome({ storage, tab: { url }, tabHandler: pageBackedTabHandler(HEALTHY_PAGE, url) });
+  globalThis.fetch = () => { throw new Error('the network must not be touched'); };
+
+  const result = await background.scrapeActiveTab();
+
+  assert.equal(result.targets, null);
+  const portfolio = (await storage.local.get(STORAGE_KEYS.PORTFOLIO))[STORAGE_KEYS.PORTFOLIO];
+  assert.equal(portfolio.AAPL.target_buy_below, 1);
+  assert.equal(portfolio.AAPL.target_sell_above, 999);
+});
+
+test('SUGGEST_TARGETS proposes without saving, and refuses when it has nothing', async () => {
+  const storage = makeStorage({
+    [STORAGE_KEYS.PORTFOLIO]: { AAPL: { shares: 5, avg_cost: 180 } },
+  });
+  installChrome({ storage });
+
+  const suggestion = await background.handleRequest({ type: MSG.SUGGEST_TARGETS, payload: { ticker: 'aapl' } });
+  assert.equal(suggestion.ticker, 'AAPL');
+  assert.equal(suggestion.basis, 'cost');
+  assert.equal(suggestion.target_buy_below, 171);
+
+  const portfolio = (await storage.local.get(STORAGE_KEYS.PORTFOLIO))[STORAGE_KEYS.PORTFOLIO];
+  assert.equal(portfolio.AAPL.target_buy_below, undefined, 'a suggestion is not a save');
+
+  await assert.rejects(
+    () => background.handleRequest({ type: MSG.SUGGEST_TARGETS, payload: { ticker: 'NVDA' } }),
+    /Nothing to go on for NVDA/
+  );
+  await assert.rejects(() => background.handleRequest({ type: MSG.SUGGEST_TARGETS, payload: {} }), /No ticker/);
+});
+
 test('the message router answers every documented request type', async () => {
   const storage = makeStorage({ [STORAGE_KEYS.SELECTORS]: { 'a.com': { price: { selector: '#p' } } } });
   installChrome({ storage });

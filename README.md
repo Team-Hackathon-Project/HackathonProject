@@ -58,6 +58,7 @@ src/
     advisor.js             Deterministic rules engine + advisory schema validation
     storage.js             Typed chrome.storage.local accessors
     llm.js                 Provider-agnostic client: structured output, retries, timeouts
+    targets.js             Suggests buy/sell targets from your own scans and decisions
     providers.js           Anthropic and Groq wire formats, and the active-provider resolver
 scripts/
   validate.mjs             Static bundle validation (npm run lint)
@@ -71,8 +72,9 @@ docs/
   DEMO.md                  Three-minute demo script, with real screenshots
   provider-check.mjs       Confirms a provider answers from the service worker
   live-quote.mjs           Real key, live page: a genuine repair and advisory
+  auto-targets.mjs         Target suggestion across repeated scans, offline
   env.mjs                  Reads the gitignored .env the runs take keys from
-test/                      149 tests: node:test + jsdom
+test/                      171 tests: node:test + jsdom
 ```
 
 ## How the self-healing loop works
@@ -156,7 +158,7 @@ Advisory output:
 ## Commands
 
 ```bash
-npm run check     # static validation + the full test suite (149 tests)
+npm run check     # static validation + the full test suite (171 tests)
 npm run package   # dist/self-healing-market-scraper-<version>.zip
 npm run e2e       # drive the real extension in a real browser, live site
                   #   EXT_SOURCE=dist/extension npm run e2e  tests the built copy
@@ -196,6 +198,37 @@ screenshots to `e2e/shots/`. Both e2e scripts run from a throwaway copy of the
 extension with `host_permissions` widened for the site under test: `activeTab`
 is only granted by a human clicking the toolbar icon, and no automation protocol
 can produce that click. The shipped manifest keeps its narrow permission set.
+
+## Suggested targets
+
+Targets are what turn a quote into a signal — without them every answer is a
+low-confidence HOLD — and typing two numbers per ticker is the step people skip.
+So the options page offers to work them out, from your own data only:
+
+| Anchor, first available | Meaning |
+| --- | --- |
+| The average of the prices you have scanned for that ticker | what it has traded at while you were watching |
+| The average price of your approved BUY decisions | what you have actually paid |
+| Your average cost | your book cost |
+| Today's price | all there is on a first scan |
+
+The band either side comes from how much those scans actually moved (their
+standard deviation, clamped to 3–20%), or a flat 5% when there is not enough
+history. Then `buy_below = anchor × (1 − band)` and
+`sell_above = anchor × (1 + band)`.
+
+That is arithmetic on your own data. It does not ask a model what a stock is
+worth, and it never presents a forecast as a fact.
+
+**Suggest targets** fills the two boxes and tells you what it anchored on — you
+still press Save. Tick **Keep them updated automatically** and every later scan
+of that ticker refreshes them, and the popup says so each time it happens.
+Positions left manual are never rewritten.
+
+![Suggested targets in the options page](docs/demo/08-targets.png)
+
+Each usable scan appends one point to `price_history` (60 per ticker, oldest
+dropped), which is what the averaging reads.
 
 ## Choosing a provider
 

@@ -3,7 +3,7 @@
  * the rest of the extension uses. Keeping every read/write here means the
  * storage shape is defined in exactly one place.
  */
-import { STORAGE_KEYS, DEFAULT_SETTINGS, MAX_DECISIONS, MAX_HEAL_LOG } from './constants.js';
+import { STORAGE_KEYS, DEFAULT_SETTINGS, MAX_DECISIONS, MAX_HEAL_LOG, MAX_PRICE_POINTS } from './constants.js';
 
 function area() {
   if (typeof chrome === 'undefined' || !chrome.storage || !chrome.storage.local) {
@@ -109,6 +109,32 @@ export async function saveSnapshot(snapshot) {
 export async function getSnapshots() {
   const stored = await getRaw(STORAGE_KEYS.SNAPSHOTS);
   return stored[STORAGE_KEYS.SNAPSHOTS] || {};
+}
+
+/**
+ * Appends one price point for a ticker, newest first and capped.
+ *
+ * `snapshots` only ever holds the latest scan; this is the series the target
+ * suggester averages over. Points are only worth keeping when the price parsed.
+ */
+export async function recordPricePoint(snapshot) {
+  if (!snapshot || !snapshot.ticker || !Number.isFinite(snapshot.current_price)) return null;
+  const stored = await getRaw(STORAGE_KEYS.PRICE_HISTORY);
+  const history = stored[STORAGE_KEYS.PRICE_HISTORY] || {};
+  const point = {
+    at: snapshot.extracted_at || new Date().toISOString(),
+    price: snapshot.current_price,
+    change_value: Number.isFinite(snapshot.change_value) ? snapshot.change_value : null,
+  };
+  history[snapshot.ticker] = [point, ...(history[snapshot.ticker] || [])].slice(0, MAX_PRICE_POINTS);
+  await setRaw({ [STORAGE_KEYS.PRICE_HISTORY]: history });
+  return history[snapshot.ticker];
+}
+
+export async function getPriceHistory(ticker = null) {
+  const stored = await getRaw(STORAGE_KEYS.PRICE_HISTORY);
+  const history = stored[STORAGE_KEYS.PRICE_HISTORY] || {};
+  return ticker ? (history[ticker] || []) : history;
 }
 
 /** Appends to a capped, newest-first log stored under `key`. */

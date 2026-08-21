@@ -1,10 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { makeStorage, installChrome, uninstallChrome } from './helpers.mjs';
-import { STORAGE_KEYS, DEFAULT_SETTINGS, MAX_DECISIONS } from '../src/lib/constants.js';
+import { STORAGE_KEYS, DEFAULT_SETTINGS, MAX_DECISIONS, MAX_PRICE_POINTS } from '../src/lib/constants.js';
 import {
   getSettings, saveSettings, setRaw, getPortfolio, savePosition, getRegistry, recordHealedSelector,
   clearRegistry, saveSnapshot, getSnapshots, recordDecision, getDecisions, recordHealEvent, getHealLog,
+  recordPricePoint, getPriceHistory,
 } from '../src/lib/storage.js';
 
 test.beforeEach(() => installChrome({ storage: makeStorage() }));
@@ -86,6 +87,25 @@ test('storage access without a chrome runtime fails loudly', async () => {
 
 test('the storage keys match the documented schema names', () => {
   assert.deepEqual(Object.values(STORAGE_KEYS).sort(), [
-    'decisions', 'heal_log', 'portfolio', 'selector_registry', 'settings', 'snapshots',
+    'decisions', 'heal_log', 'portfolio', 'price_history', 'selector_registry', 'settings', 'snapshots',
   ]);
+});
+
+test('price points accumulate per ticker, newest first and capped', async () => {
+  for (let i = 0; i < MAX_PRICE_POINTS + 5; i++) {
+    await recordPricePoint({ ticker: 'AAPL', current_price: 200 + i, change_value: 1, extracted_at: `2026-08-2${i % 9}T00:00:00Z` });
+  }
+  await recordPricePoint({ ticker: 'MSFT', current_price: 480 });
+
+  const aapl = await getPriceHistory('AAPL');
+  assert.equal(aapl.length, MAX_PRICE_POINTS, 'the series is capped');
+  assert.equal(aapl[0].price, 200 + MAX_PRICE_POINTS + 4, 'newest first');
+  assert.equal((await getPriceHistory('MSFT')).length, 1, 'tickers do not share a series');
+  assert.deepEqual(Object.keys(await getPriceHistory()).sort(), ['AAPL', 'MSFT']);
+});
+
+test('a snapshot with no usable price is not recorded as a price point', async () => {
+  assert.equal(await recordPricePoint({ ticker: 'AAPL', current_price: null }), null);
+  assert.equal(await recordPricePoint(null), null);
+  assert.deepEqual(await getPriceHistory('AAPL'), []);
 });

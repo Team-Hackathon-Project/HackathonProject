@@ -13,7 +13,8 @@
     "e2e": "node e2e/quote-page.mjs",
     "e2e:heal": "node e2e/self-healing.mjs",
     "e2e:provider": "node e2e/provider-check.mjs",
-    "e2e:live": "node e2e/live-quote.mjs"
+    "e2e:live": "node e2e/live-quote.mjs",
+    "e2e:targets": "node e2e/auto-targets.mjs"
   },
   "devDependencies": {
     "jsdom": "^30.0.1",
