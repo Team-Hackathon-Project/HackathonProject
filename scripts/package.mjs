@@ -1,12 +1,21 @@
 /**
  * Builds the loadable/uploadable extension archive (`npm run package`).
  *
- * Writes `dist/<name>-<version>.zip` containing exactly what Chrome needs —
+ * Writes two things into `dist/`, both containing exactly what Chrome needs —
  * `manifest.json` and `src/` — and nothing else: no tests, no scripts, no
- * repository metadata. The zip is written by hand with `node:zlib` so the
- * project keeps its "no runtime and no build dependencies" property.
+ * repository metadata.
+ *
+ *   dist/extension/               load this with "Load unpacked"
+ *   dist/<name>-<version>.zip     hand this to someone else
+ *
+ * Chrome and Edge cannot install a plain zip: "Load unpacked" wants a folder,
+ * and a .crx needs a signing key. So the folder is the one to point the browser
+ * at, and the zip is for sending.
+ *
+ * The zip is written by hand with `node:zlib` so the project keeps its
+ * "no runtime and no build dependencies" property.
  */
-import { readFileSync, writeFileSync, mkdirSync, readdirSync, statSync, rmSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, readdirSync, statSync, rmSync, cpSync } from 'node:fs';
 import { deflateRawSync } from 'node:zlib';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
@@ -142,6 +151,17 @@ const outName = `${pkg.name}-${pkg.version}.zip`;
 const outPath = path.join(distDir, outName);
 writeFileSync(outPath, buildZip(entries));
 
+// The same payload as a loadable folder, since a zip cannot be installed.
+const unpackedDir = path.join(distDir, 'extension');
+for (const name of INCLUDE) {
+  cpSync(path.join(ROOT, name), path.join(unpackedDir, name), { recursive: true });
+}
+
 const bytes = statSync(outPath).size;
-console.log(`packaged ${entries.length} files -> dist/${outName} (${(bytes / 1024).toFixed(1)} KB)`);
+console.log(`packaged ${entries.length} files (${(bytes / 1024).toFixed(1)} KB)`);
 for (const name of files) console.log(`  ${name}`);
+console.log('');
+console.log(`  dist/extension/        <- "Load unpacked" points here`);
+console.log(`  dist/${outName}   <- send this to someone else`);
+console.log('');
+console.log('Install: chrome://extensions (or edge://extensions) -> Developer mode -> Load unpacked -> dist/extension');

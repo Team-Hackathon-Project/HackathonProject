@@ -13,8 +13,20 @@ where you approve, reject, or override — and the decision is recorded locally.
 npm install && npm run check
 ```
 
-Then in Chrome: `chrome://extensions` → enable **Developer mode** → **Load unpacked**
-→ select this folder. Open a quote page (Yahoo Finance, Google Finance,
+Then in Chrome or Edge: `chrome://extensions` (or `edge://extensions`) → enable
+**Developer mode** → **Load unpacked** → select this folder.
+
+`npm run package` also writes a clean copy with nothing but `manifest.json` and
+`src/` in it:
+
+```
+dist/extension/                        point "Load unpacked" here
+dist/self-healing-market-scraper-1.0.0.zip   send this to someone else
+```
+
+A zip cannot be installed directly — "Load unpacked" wants a folder, and a
+`.crx` needs a signing key — so whoever receives the zip unpacks it first and
+loads the folder inside. Open a quote page (Yahoo Finance, Google Finance,
 MarketWatch, stockanalysis.com, or anything else), click the toolbar icon, and
 press **Scan this tab**.
 
@@ -147,6 +159,7 @@ Advisory output:
 npm run check     # static validation + the full test suite (149 tests)
 npm run package   # dist/self-healing-market-scraper-<version>.zip
 npm run e2e       # drive the real extension in a real browser, live site
+                  #   EXT_SOURCE=dist/extension npm run e2e  tests the built copy
 npm run e2e:heal  # drive the repair loop against a mangled page, offline
 npm run e2e:provider   # does the configured key and model actually answer?
 npm run e2e:live       # real repair + real advisory on a live page (spends tokens)

@@ -51,12 +51,15 @@ export function findBrowser() {
  * automated run can inject without the toolbar click that grants activeTab.
  */
 export function stageExtension(hosts) {
+  // `EXT_SOURCE` lets a run verify a built folder (dist/extension) rather than
+  // the working tree — the same bytes a person would load.
+  const source = process.env.EXT_SOURCE ? path.resolve(process.env.EXT_SOURCE) : ROOT;
   const dir = path.join(os.tmpdir(), `market-scraper-e2e-${process.pid}`);
   rmSync(dir, { recursive: true, force: true });
   mkdirSync(dir, { recursive: true });
-  cpSync(path.join(ROOT, 'src'), path.join(dir, 'src'), { recursive: true });
+  cpSync(path.join(source, 'src'), path.join(dir, 'src'), { recursive: true });
 
-  const manifest = JSON.parse(readFileSync(path.join(ROOT, 'manifest.json'), 'utf8'));
+  const manifest = JSON.parse(readFileSync(path.join(source, 'manifest.json'), 'utf8'));
   manifest.host_permissions = Array.from(new Set([...(manifest.host_permissions || []), ...hosts]));
   writeFileSync(path.join(dir, 'manifest.json'), JSON.stringify(manifest, null, 2));
   return dir;
