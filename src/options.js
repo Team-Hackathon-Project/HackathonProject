@@ -30,6 +30,17 @@ function numberOrNull(value) {
  */
 let draft = null;
 
+/**
+ * The key field is a password input, so a truncated paste is invisible — and a
+ * truncated key fails with the same "invalid API key" a wrong one does. The
+ * length is the one safe thing to show: enough to spot a bad paste, useless to
+ * anyone reading over a shoulder.
+ */
+function renderKeyLength() {
+  const value = el('api-key').value.trim();
+  el('key-length').textContent = value ? `(${value.length} characters)` : '(not set)';
+}
+
 function renderProviderFields(id) {
   const provider = providerFor(id);
   const values = draft.providers[provider.id] || {};
@@ -39,6 +50,7 @@ function renderProviderFields(id) {
   el('api-key').value = values.apiKey || '';
   el('model').value = values.model || provider.defaultModel;
   el('model').placeholder = provider.defaultModel;
+  renderKeyLength();
   el('load-models').classList.toggle('hidden', !provider.modelsUrl);
 
   const list = el('model-list');
@@ -193,6 +205,8 @@ el('load-models').addEventListener('click', async () => {
     setStatus(el('model-status'), String((error && error.message) || error), true);
   }
 });
+
+el('api-key').addEventListener('input', renderKeyLength);
 
 el('test-provider').addEventListener('click', async () => {
   const id = el('provider').value;

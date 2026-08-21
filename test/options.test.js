@@ -201,3 +201,15 @@ test('the automatic checkbox rides along with the saved position', async () => {
   assert.match(el('portfolio-body').textContent, /auto/);
   assert.equal(el('pos-auto').checked, false, 'the box resets so the next entry is deliberate');
 });
+
+test('the key field reports its length, so a truncated paste is visible', async () => {
+  const input = el('api-key');
+  input.value = '';
+  input.dispatchEvent(new window.Event('input'));
+  assert.equal(el('key-length').textContent, '(not set)');
+
+  input.value = '  gsk_1234567890  ';
+  input.dispatchEvent(new window.Event('input'));
+  assert.equal(el('key-length').textContent, '(14 characters)', 'surrounding whitespace is not counted');
+  assert.equal(el('key-length').textContent.includes('gsk_'), false, 'the key itself is never shown');
+});
