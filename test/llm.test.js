@@ -138,7 +138,7 @@ test('a Groq request uses bearer auth, the chat endpoint and a strict schema', a
   assert.equal(url, 'https://api.groq.com/openai/v1/chat/completions');
   assert.equal(init.headers.authorization, `Bearer ${GROQ_KEY}`);
   assert.equal(init.headers['x-api-key'], undefined, 'the Anthropic scheme must not leak into a Groq call');
-  assert.equal(body.model, 'llama-3.3-70b-versatile');
+  assert.equal(body.model, 'openai/gpt-oss-120b');
   assert.equal(body.response_format.type, 'json_schema');
   assert.equal(body.response_format.json_schema.strict, true);
   assert.deepEqual(body.response_format.json_schema.schema.required, ['selector', 'strategy', 'confidence', 'reason']);
@@ -171,6 +171,33 @@ test('a model that rejects json_schema is retried with the schema in the prompt'
   assert.equal(call, 2, 'exactly one retry');
 });
 
+test('a model whose JSON fails schema validation is also retried plainly', async () => {
+  // Observed from Groq: the model answers, the schema validator rejects it, and
+  // the 400 says nothing about response_format. That still means "this model
+  // cannot do strict schema", so it earns the same one retry.
+  let call = 0;
+  const fetchImpl = stubFetch(async (_url, init) => {
+    call += 1;
+    if (call === 1) {
+      return {
+        ok: false, status: 400, statusText: '400',
+        async text() {
+          return JSON.stringify({ error: { message: "Failed to validate JSON. Please adjust your prompt. See 'failed_generation' for more details." } });
+        },
+      };
+    }
+    assert.equal(JSON.parse(init.body).response_format.type, 'json_object');
+    return {
+      ok: true, status: 200, statusText: '200',
+      async text() { return JSON.stringify(groqResponse({ selector: '.p', strategy: 'css', confidence: 0.7, reason: 'ok' }).json); },
+    };
+  });
+
+  const result = await healSelector({ field: 'price', host: 'x.com', snippet: '<i>1</i>', provider: 'groq', apiKey: GROQ_KEY, fetchImpl });
+  assert.equal(result.selector, '.p');
+  assert.equal(call, 2);
+});
+
 test('a Groq answer wrapped in prose or a code fence is still parsed', () => {
   const fenced = groqResponse(null, { raw: ['```json', '{"action":"HOLD"}', '```'].join('\n') }).json;
   assert.deepEqual(extractStructuredJson(fenced, 'groq'), { action: 'HOLD' });
@@ -192,9 +219,9 @@ test('a Groq HTTP error surfaces its message and the provider name', async () =>
 });
 
 test('listModels reads the catalogue for providers that publish one', async () => {
-  const fetchImpl = stubFetch({ status: 200, json: { data: [{ id: 'llama-3.1-8b-instant' }, { id: 'llama-3.3-70b-versatile' }] } });
+  const fetchImpl = stubFetch({ status: 200, json: { data: [{ id: 'openai/gpt-oss-20b' }, { id: 'openai/gpt-oss-120b' }] } });
   const models = await listModels({ provider: 'groq', apiKey: GROQ_KEY, fetchImpl });
-  assert.deepEqual(models, ['llama-3.1-8b-instant', 'llama-3.3-70b-versatile']);
+  assert.deepEqual(models, ['openai/gpt-oss-120b', 'openai/gpt-oss-20b']);
   assert.equal(fetchImpl.calls[0].url, 'https://api.groq.com/openai/v1/models');
   assert.equal(await listModels({ provider: 'anthropic', apiKey: KEY, fetchImpl }), null);
 });
@@ -207,7 +234,7 @@ test('activeLlm resolves the selected provider, its key and its model', () => {
   const active = activeLlm(settings);
   assert.equal(active.provider.id, 'groq');
   assert.equal(active.apiKey, 'gsk_b');
-  assert.equal(active.model, 'llama-3.3-70b-versatile', 'an empty model falls back to the provider default');
+  assert.equal(active.model, 'openai/gpt-oss-120b', 'an empty model falls back to the provider default');
 
   assert.equal(activeLlm({}).provider.id, 'anthropic', 'Anthropic stays the default');
   assert.equal(providerFor('nonsense').id, 'anthropic');

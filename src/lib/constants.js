@@ -52,7 +52,7 @@ export const DEFAULT_SETTINGS = {
   provider: 'anthropic',
   providers: {
     anthropic: { apiKey: '', model: 'claude-opus-5' },
-    groq: { apiKey: '', model: 'llama-3.3-70b-versatile' },
+    groq: { apiKey: '', model: 'openai/gpt-oss-120b' },
   },
   selfHealEnabled: true,
   llmAdviceEnabled: true,

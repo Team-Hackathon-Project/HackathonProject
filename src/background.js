@@ -25,6 +25,9 @@ import {
 /** How far down the candidate list one bad match may push us. */
 const MAX_CANDIDATE_RETRIES = 4;
 
+/** How many times one field may be sent back to the model before giving up. */
+const MAX_HEAL_ATTEMPTS = 2;
+
 const RESTRICTED_SCHEMES = ['chrome:', 'chrome-extension:', 'edge:', 'about:', 'devtools:', 'view-source:'];
 const CHROME_WEBSTORE = /^https:\/\/chromewebstore\.google\.com/;
 
@@ -173,59 +176,95 @@ async function buildCandidateMap(host, registry) {
   return map;
 }
 
+/** Thrown when retrying would be pointless: the answer will not change. */
+class TerminalHealError extends Error {}
+
 /**
- * Attempts to repair one failed field: sanitize the container, ask the model
- * for a selector, validate it against the live DOM, then persist it.
- * Returns { healed, value, selector, ... } — never throws.
+ * One repair round trip: ask, sanity-check, validate in the live page, persist.
+ * Throws on failure so the caller can decide whether another attempt is worth
+ * making. `feedback` carries the previous attempt's rejection back to the model.
+ */
+async function attemptHeal({ tabId, host, field, snippetHtml, tried, llm, feedback, entry }) {
+  const proposal = await healSelector({
+    field,
+    host,
+    snippet: snippetHtml,
+    previousSelector: (tried || [])[0] || null,
+    feedback,
+    provider: llm.provider.id,
+    model: llm.model,
+    apiKey: llm.apiKey,
+  });
+  entry.proposed = proposal.selector;
+  entry.strategy = proposal.strategy;
+  entry.confidence = proposal.confidence;
+  entry.reason = proposal.reason;
+
+  // Confidence first: a model that correctly reports "this metric is not in
+  // the fragment" also returns no selector, and its explanation is far more
+  // useful to the user than "unusable selector: ". Asking again will not
+  // conjure a metric the fragment does not hold.
+  if (proposal.confidence <= 0 || !proposal.selector) {
+    throw new TerminalHealError(proposal.reason || 'model reported the metric is not in the snippet');
+  }
+  if (!isPlausibleSelector(proposal)) throw new Error(`model returned an unusable selector: ${proposal.selector}`);
+
+  // Re-attempt extraction in the live page — no reload required.
+  const check = await sendToTab(tabId, {
+    type: MSG.VALIDATE_SELECTOR,
+    payload: { field, selector: proposal.selector, strategy: proposal.strategy },
+  });
+  if (!check || !check.ok) throw new Error((check && check.error) || 'validation in the page failed');
+  // A selector that resolves is not yet a selector that is *right*: the model
+  // can point at a neighbouring node. Refuse to persist one whose value is the
+  // wrong shape for the field.
+  if (!valueFitsField(field, check.value)) {
+    throw new Error(`selector matched, but "${String(check.value).slice(0, 60)}" is not a valid ${field}`);
+  }
+
+  const stored = await recordHealedSelector(host, field, proposal);
+  entry.healed = true;
+  entry.value = check.value;
+  return { healed: true, field, value: check.value, used: { ...stored, source: 'healed' } };
+}
+
+/**
+ * Repairs one failed field, retrying once with the rejection handed back.
+ *
+ * The retry is what makes this work against real pages: the first answer is
+ * often the right *element* expressed badly — a Tailwind class that needs CSS
+ * escaping, a selector landing on the label instead of the value. Told exactly
+ * why it was rejected, the model usually fixes it. Never throws.
  */
 async function healField({ tabId, host, field, snippet, tried, settings }) {
   const llm = activeLlm(settings);
-  const attempt = { field, host, at: new Date().toISOString(), healed: false, provider: llm.provider.id };
-  try {
-    if (!snippet) throw new Error('no container HTML captured for this field');
-    const cleaned = await sanitizeSnippet(snippet, settings.maxSnippetChars);
-    if (!cleaned.html) throw new Error('sanitized container was empty');
+  let snippetHtml = null;
+  let feedback = null;
+  let lastError = null;
 
-    const proposal = await healSelector({
-      field,
-      host,
-      snippet: cleaned.html,
-      previousSelector: (tried || [])[0] || null,
-      provider: llm.provider.id,
-      model: llm.model,
-      apiKey: llm.apiKey,
-    });
-    attempt.proposed = proposal.selector;
-    attempt.strategy = proposal.strategy;
-    attempt.confidence = proposal.confidence;
-    attempt.reason = proposal.reason;
-
-    if (!isPlausibleSelector(proposal)) throw new Error(`model returned an unusable selector: ${proposal.selector}`);
-    if (proposal.confidence <= 0) throw new Error(proposal.reason || 'model reported the metric is not in the snippet');
-
-    // Re-attempt extraction in the live page — no reload required.
-    const check = await sendToTab(tabId, {
-      type: MSG.VALIDATE_SELECTOR,
-      payload: { field, selector: proposal.selector, strategy: proposal.strategy },
-    });
-    if (!check || !check.ok) throw new Error((check && check.error) || 'validation in the page failed');
-    // A selector that resolves is not yet a selector that is *right*: the model
-    // can point at a neighbouring node. Refuse to persist one whose value is
-    // the wrong shape for the field.
-    if (!valueFitsField(field, check.value)) {
-      throw new Error(`selector matched, but "${String(check.value).slice(0, 60)}" is not a valid ${field}`);
+  for (let attempt = 1; attempt <= MAX_HEAL_ATTEMPTS; attempt++) {
+    const entry = { field, host, at: new Date().toISOString(), healed: false, provider: llm.provider.id, attempt };
+    try {
+      if (snippetHtml === null) {
+        if (!snippet) throw new TerminalHealError('no container HTML captured for this field');
+        const cleaned = await sanitizeSnippet(snippet, settings.maxSnippetChars);
+        if (!cleaned.html) throw new TerminalHealError('sanitized container was empty');
+        snippetHtml = cleaned.html;
+      }
+      const outcome = await attemptHeal({ tabId, host, field, snippetHtml, tried, llm, feedback, entry });
+      await recordHealEvent(entry);
+      return outcome;
+    } catch (error) {
+      lastError = error instanceof LlmError ? error.message : String((error && error.message) || error);
+      entry.error = lastError;
+      await recordHealEvent(entry);
+      // A transport failure or an honest "it is not in there" will not improve
+      // on a second ask; a rejected selector often will.
+      if (error instanceof TerminalHealError || error instanceof LlmError) break;
+      feedback = lastError;
     }
-
-    const stored = await recordHealedSelector(host, field, proposal);
-    attempt.healed = true;
-    attempt.value = check.value;
-    await recordHealEvent(attempt);
-    return { healed: true, field, value: check.value, used: { ...stored, source: 'healed' } };
-  } catch (error) {
-    attempt.error = error instanceof LlmError ? error.message : String((error && error.message) || error);
-    await recordHealEvent(attempt);
-    return { healed: false, field, error: attempt.error };
   }
+  return { healed: false, field, error: lastError };
 }
 
 /**

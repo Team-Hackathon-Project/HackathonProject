@@ -113,8 +113,11 @@ const groq = {
   // The options page can list the account's live models, so nothing here has
   // to guess at an id that Groq may have retired.
   modelsUrl: 'https://api.groq.com/openai/v1/models',
-  defaultModel: 'llama-3.3-70b-versatile',
-  models: ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant'],
+  // Groq's catalogue turns over quickly and differs per account, which is why
+  // the options page can list what a key can actually run. These two were
+  // verified to honour strict json_schema; anything else, use Load models.
+  defaultModel: 'openai/gpt-oss-120b',
+  models: ['openai/gpt-oss-120b', 'openai/gpt-oss-20b'],
   keyPlaceholder: 'gsk_…',
   keyOrigin: 'console.groq.com/keys',
   host: 'api.groq.com',
@@ -166,10 +169,17 @@ const groq = {
     return typeof parsed.error === 'string' ? parsed.error : parsed.error.message;
   },
 
-  /** True when a 400 is complaining about the strict json_schema mode. */
+  /**
+   * True when a 400 means "this model cannot do schema-constrained output".
+   *
+   * Two shapes seen in the wild: the endpoint rejecting `response_format`
+   * outright, and the model producing JSON the schema validator then refuses
+   * ("Failed to validate JSON... see failed_generation"). Both are worth one
+   * retry with the schema moved into the prompt.
+   */
   needsPlainJson(status, detail) {
     if (status !== 400 || !detail) return false;
-    return /response_format|json_schema|structured output/i.test(detail);
+    return /response_format|json_schema|structured output|failed to validate json|failed_generation/i.test(detail);
   },
 };
 

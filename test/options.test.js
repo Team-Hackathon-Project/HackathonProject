@@ -90,7 +90,7 @@ test('switching provider swaps the fields and keeps both keys', async () => {
   assert.match(el('key-label').textContent, /Groq/);
   assert.equal(el('key-host').textContent, 'api.groq.com');
   assert.equal(el('api-key').value, '', 'the Groq key field starts empty');
-  assert.equal(el('model').value, 'llama-3.3-70b-versatile');
+  assert.equal(el('model').value, 'openai/gpt-oss-120b');
   assert.equal(el('load-models').classList.contains('hidden'), false, 'Groq can list its models');
 
   el('api-key').value = 'gsk_test';

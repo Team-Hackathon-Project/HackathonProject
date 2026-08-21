@@ -250,6 +250,79 @@ test('a selector that resolves to the wrong kind of value is never persisted', a
   assert.match(priceAttempt.error, /not a valid price/);
 });
 
+test('a model that says the metric is absent has its reason reported', async () => {
+  // The cooperative answer to "this fragment has no such metric" is confidence
+  // 0 and an explanation — which is what the user needs to see, rather than an
+  // "unusable selector: " with nothing after the colon.
+  const url = 'https://finance.yahoo.com/quote/AAPL';
+  const storage = makeStorage({ [STORAGE_KEYS.SETTINGS]: { apiKey: 'sk-ant-test' } });
+  installChrome({ storage, tab: { url }, tabHandler: pageBackedTabHandler(BROKEN_PAGE, url), offscreenHandler: offscreenSanitize });
+  globalThis.fetch = stubFetch(messageResponse({
+    selector: '', strategy: 'css', confidence: 0,
+    reason: 'The fragment does not contain the requested metric.',
+  }));
+
+  const result = await background.scrapeActiveTab();
+
+  assert.ok(result.warnings.some((w) => /The fragment does not contain the requested metric\./.test(w)));
+  assert.ok(!result.warnings.some((w) => /unusable selector: *$/m.test(w)));
+  const healLog = (await storage.local.get(STORAGE_KEYS.HEAL_LOG))[STORAGE_KEYS.HEAL_LOG] || [];
+  assert.match(healLog[0].error, /does not contain the requested metric/);
+});
+
+test('a rejected selector is sent back to the model with the reason', async () => {
+  // The first answer names the right element but is not valid CSS. Told why it
+  // was rejected, the model gets a second go — this is what makes the repair
+  // loop work against real pages rather than fixtures.
+  const url = 'https://finance.yahoo.com/quote/AAPL';
+  const storage = makeStorage({ [STORAGE_KEYS.SETTINGS]: { apiKey: 'sk-ant-test' } });
+  installChrome({ storage, tab: { url }, tabHandler: pageBackedTabHandler(BROKEN_PAGE, url), offscreenHandler: offscreenSanitize });
+
+  const prompts = [];
+  globalThis.fetch = stubFetch(async (_url, init) => {
+    const body = JSON.parse(init.body);
+    prompts.push(body.messages[0].content);
+    const first = prompts.filter((p) => /Metric that failed: price/.test(p)).length === 1;
+    const payload = first
+      ? { selector: 'div.max-w-[50%]', strategy: 'css', confidence: 0.9, reason: 'the price wrapper' }
+      : { selector: '.qz-8f31ab', strategy: 'css', confidence: 0.9, reason: 'the value node' };
+    return {
+      ok: true, status: 200, statusText: '200',
+      async text() { return JSON.stringify(messageResponse(payload).json); },
+    };
+  });
+
+  const result = await background.scrapeActiveTab();
+
+  assert.equal(result.snapshot.current_price, 224.5, 'the retry recovered the price');
+  assert.ok(result.healed.some((entry) => entry.field === 'price' && entry.selector === '.qz-8f31ab'));
+
+  const retried = prompts.filter((p) => /Your previous answer was rejected/.test(p));
+  assert.ok(retried.length >= 1, 'the rejection must be handed back to the model');
+  assert.match(retried[0], /invalid selector syntax/);
+
+  const healLog = (await storage.local.get(STORAGE_KEYS.HEAL_LOG))[STORAGE_KEYS.HEAL_LOG] || [];
+  const priceAttempts = healLog.filter((entry) => entry.field === 'price');
+  assert.equal(priceAttempts.length, 2, 'both attempts are recorded');
+  assert.equal(priceAttempts.find((entry) => entry.attempt === 2).healed, true);
+});
+
+test('an honest "the metric is not here" is not retried', async () => {
+  const url = 'https://finance.yahoo.com/quote/AAPL';
+  const storage = makeStorage({ [STORAGE_KEYS.SETTINGS]: { apiKey: 'sk-ant-test' } });
+  installChrome({ storage, tab: { url }, tabHandler: pageBackedTabHandler(BROKEN_PAGE, url), offscreenHandler: offscreenSanitize });
+  const fetchImpl = stubFetch(messageResponse({
+    selector: '', strategy: 'css', confidence: 0, reason: 'The fragment does not contain that metric.',
+  }));
+  globalThis.fetch = fetchImpl;
+
+  await background.scrapeActiveTab();
+
+  const healLog = (await storage.local.get(STORAGE_KEYS.HEAL_LOG))[STORAGE_KEYS.HEAL_LOG] || [];
+  const priceAttempts = healLog.filter((entry) => entry.field === 'price');
+  assert.equal(priceAttempts.length, 1, 'asking again cannot conjure a metric that is not there');
+});
+
 test('a page-wide selector from the model is rejected before it reaches the page', async () => {
   const url = 'https://finance.yahoo.com/quote/AAPL';
   const storage = makeStorage({ [STORAGE_KEYS.SETTINGS]: { apiKey: 'sk-ant-test' } });

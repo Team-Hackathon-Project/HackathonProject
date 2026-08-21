@@ -21,7 +21,7 @@ test('settings fall back to the documented defaults and merge on save', async ()
 
 test('a key saved for one provider does not disturb the other', async () => {
   await saveSettings({ providers: { anthropic: { apiKey: 'sk-ant-x' } } });
-  await saveSettings({ provider: 'groq', providers: { groq: { apiKey: 'gsk_y', model: 'llama-3.1-8b-instant' } } });
+  await saveSettings({ provider: 'groq', providers: { groq: { apiKey: 'gsk_y', model: 'openai/gpt-oss-20b' } } });
   const settings = await getSettings();
   assert.equal(settings.provider, 'groq');
   assert.equal(settings.providers.groq.apiKey, 'gsk_y');

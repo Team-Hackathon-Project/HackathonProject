@@ -199,7 +199,7 @@ export function groqResponse(payload, { raw = null } = {}) {
     json: {
       id: 'chatcmpl_test',
       object: 'chat.completion',
-      model: 'llama-3.3-70b-versatile',
+      model: 'openai/gpt-oss-120b',
       choices: [{
         index: 0,
         finish_reason: 'stop',

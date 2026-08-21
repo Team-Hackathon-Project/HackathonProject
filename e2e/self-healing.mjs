@@ -55,7 +55,7 @@ try {
         provider,
         providers: {
           anthropic: { apiKey: 'sk-ant-e2e-stub', model: 'claude-opus-5' },
-          groq: { apiKey: 'gsk_e2e_stub', model: 'llama-3.3-70b-versatile' },
+          groq: { apiKey: 'gsk_e2e_stub', model: 'openai/gpt-oss-120b' },
         },
         selfHealEnabled: true,
         llmAdviceEnabled: true,
@@ -77,7 +77,7 @@ try {
     // the real parsing path rather than a single shared shape.
     const envelope = (payload) => JSON.stringify(provider === 'groq'
       ? {
-          id: 'chatcmpl_e2e', object: 'chat.completion', model: 'llama-3.3-70b-versatile',
+          id: 'chatcmpl_e2e', object: 'chat.completion', model: 'openai/gpt-oss-120b',
           choices: [{ index: 0, finish_reason: 'stop', message: { role: 'assistant', content: JSON.stringify(payload) } }],
           usage: { prompt_tokens: 100, completion_tokens: 50 },
         }

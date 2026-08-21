@@ -145,7 +145,9 @@ const HEAL_SYSTEM = [
   'Identify the single element inside the fragment that holds that metric and return a selector that resolves to it.',
   'Prefer stable hooks in this order: data-* attributes, ARIA/test ids, semantic tags, structural paths. Avoid hashed or randomly generated class names.',
   'Prefer a CSS selector. Use an XPath expression only when no CSS selector can express the match.',
-  'The selector must resolve to a single element whose text content is the metric value itself, not a wrapper containing several metrics.',
+  'The selector must resolve to a single element that carries the metric, not a broad wrapper holding several unrelated metrics.',
+  'The element may hold closely related text alongside the value — a percentage next to the absolute change, a currency symbol, a "Vol" label — and that is fine, because the caller parses the value out of the text.',
+  'Selectors must be valid CSS as written. Utility class names containing brackets, percent signs, colons or slashes (Tailwind-style, e.g. max-w-[50%]) need every special character escaped, so prefer attributes, structure, or a plain class instead.',
   'If the fragment genuinely does not contain the metric, return confidence 0 and explain why in one sentence.',
 ].join(' ');
 
@@ -153,17 +155,20 @@ const HEAL_SYSTEM = [
  * Asks the model for a replacement selector for one broken field.
  * Returns { selector, strategy, confidence, reason }.
  */
-export async function healSelector({ field, host, snippet, previousSelector, provider, model, apiKey, fetchImpl, timeoutMs }) {
+export async function healSelector({ field, host, snippet, previousSelector, feedback, provider, model, apiKey, fetchImpl, timeoutMs }) {
   const userContent = [
     `Host: ${host}`,
     `Metric that failed: ${field}`,
     previousSelector ? `Selector that no longer matches: ${previousSelector}` : 'No previous selector recorded.',
+    // The caller retries once, and the rejection is the most useful thing it
+    // can hand back: the model usually had the right element in mind.
+    feedback ? `Your previous answer was rejected: ${feedback}. Return a different selector that avoids that problem.` : null,
     '',
     'Sanitized HTML fragment:',
     '```html',
     snippet,
     '```',
-  ].join('\n');
+  ].filter((line) => line !== null).join('\n');
 
   const parsed = await runStructured({
     provider,

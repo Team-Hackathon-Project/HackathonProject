@@ -6,7 +6,7 @@ screenshot below is a real capture from a real browser run, not a mockup.
 ## Setup (before you present)
 
 ```bash
-npm install && npm run check     # 145 tests, static bundle validation
+npm install && npm run check     # 149 tests, static bundle validation
 ```
 
 Load it: `chrome://extensions` (or `edge://extensions`) → **Developer mode** →
@@ -61,7 +61,14 @@ no reload.
 
 ![A healed selector, and two rejected ones](demo/04-self-healing.png)
 
-The interesting part of that screenshot is the **rejection**. A selector that
+Here is a real one, healed live on stockanalysis.com with a Groq key — the
+shipped `change_percentage` hook is genuinely stale on that site, and the model
+replaced it with a structural selector that the extension then validated against
+the live DOM before trusting it:
+
+![A real repair on a live page](demo/07-live-heal.png)
+
+The interesting part of the earlier screenshot is the **rejection**. A selector that
 merely *resolves* is not yet a selector that is *right*: here the model pointed
 the volume and change fields at the price node, and the extension refused both
 because `$182.44` is not a plausible volume or percentage. It heals, but it does
@@ -89,7 +96,7 @@ the model id is never a guess.
 
 ## If you are asked "what have you actually verified?"
 
-- `npm run check` — 145 unit/integration tests plus static manifest and module
+- `npm run check` — 149 unit/integration tests plus static manifest and module
   graph validation.
 - Real browser runs (`npm run e2e`, `npm run e2e:heal`) against
   **finance.yahoo.com** (all five fields, no healing), **stockanalysis.com** and

@@ -60,7 +60,7 @@ docs/
   provider-check.mjs       Confirms a provider answers from the service worker
   live-quote.mjs           Real key, live page: a genuine repair and advisory
   env.mjs                  Reads the gitignored .env the runs take keys from
-test/                      145 tests: node:test + jsdom
+test/                      149 tests: node:test + jsdom
 ```
 
 ## How the self-healing loop works
@@ -144,7 +144,7 @@ Advisory output:
 ## Commands
 
 ```bash
-npm run check     # static validation + the full test suite (145 tests)
+npm run check     # static validation + the full test suite (149 tests)
 npm run package   # dist/self-healing-market-scraper-<version>.zip
 npm run e2e       # drive the real extension in a real browser, live site
 npm run e2e:heal  # drive the repair loop against a mangled page, offline
@@ -199,6 +199,7 @@ message lives.
 | Auth | `x-api-key` | `Authorization: Bearer` |
 | Schema enforcement | `output_config.format` | `response_format.json_schema` |
 | Model list in options | fixed | **Load models from provider** reads the live catalogue |
+| Default model | `claude-opus-5` | `openai/gpt-oss-120b` |
 
 Not every model behind an OpenAI-compatible endpoint supports strict
 `json_schema`. When one rejects it, the client retries the same request once
@@ -208,8 +209,20 @@ too, because smaller models do that.
 
 Both endpoints have been confirmed reachable from the MV3 service worker
 (`npm run e2e:provider`), and the full repair loop has been driven end to end in
-both wire formats (`npm run e2e:heal`, `npm run e2e:heal -- groq`). To prove a
-real key end to end, put it in `.env` and run `npm run e2e:live`.
+both wire formats (`npm run e2e:heal`, `npm run e2e:heal -- groq`).
+
+It has also been run for real: with a Groq key on `openai/gpt-oss-120b`, a scan
+of stockanalysis.com repaired the stale `change_percentage` hook to
+`div.mb-5 > div:first-child > div:nth-child(2)`, validated it against the live
+DOM, persisted it, and produced a model-written advisory. Put your key in `.env`
+and `npm run e2e:live` does the same.
+
+Two things that run taught us, both now fixed: a model answering "that metric is
+not in this fragment" was being reported as `unusable selector: ` with nothing
+after the colon, hiding the one useful sentence it had written; and a rejected
+selector was never sent back, so a first answer that named the right element in
+invalid CSS (a Tailwind class needing escaping) simply lost. The repair loop now
+retries once with the rejection quoted back to it.
 
 ## What has been verified in a real browser
 
@@ -220,7 +233,7 @@ and all. Results from the last sweep:
 | Page | Result |
 | --- | --- |
 | `finance.yahoo.com/quote/AAPL` | All five fields from the shipped defaults; no healing needed |
-| `stockanalysis.com/stocks/aapl` | Ticker, price, volume and news; `change_percentage` needs healing |
+| `stockanalysis.com/stocks/aapl` | Ticker, price, volume and news; `change_percentage` healed live by the model |
 | `marketwatch.com/investing/stock/aapl` | Ticker, price, change and news; the page carries no volume figure |
 | `google.com/finance/quote/AAPL:NASDAQ` | Ticker (from the URL) and volume; Finance Beta rewrote the page, so price needs healing |
 | Local page with mangled markup | Healing repairs `price`; wrong-field proposals are refused |
