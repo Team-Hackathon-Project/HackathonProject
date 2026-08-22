@@ -67,7 +67,11 @@ export function stageExtension(hosts) {
   const dir = path.join(os.tmpdir(), `market-scraper-e2e-${process.pid}`);
   rmSync(dir, { recursive: true, force: true });
   mkdirSync(dir, { recursive: true });
-  cpSync(path.join(source, 'src'), path.join(dir, 'src'), { recursive: true });
+  // Both shipped surfaces: the extension itself and the dashboard that rides
+  // along inside it. Staging only `src/` would 404 the dashboard route.
+  for (const folder of ['src', 'web']) {
+    cpSync(path.join(source, folder), path.join(dir, folder), { recursive: true });
+  }
 
   const manifest = JSON.parse(readFileSync(path.join(source, 'manifest.json'), 'utf8'));
   manifest.host_permissions = Array.from(new Set([...(manifest.host_permissions || []), ...hosts]));

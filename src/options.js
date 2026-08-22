@@ -6,8 +6,10 @@
  * trip needed — except for the registry reset, which goes through the worker
  * so the reset is logged in one place.
  */
-import { MSG } from './lib/constants.js';
-import { getSettings, saveSettings, getPortfolio, savePosition, getRegistry, getHealLog } from './lib/storage.js';
+import { MSG, DASHBOARD_PATH } from './lib/constants.js';
+import {
+  getSettings, saveSettings, getPortfolio, savePosition, getRegistry, getHealLog, getWatchlist,
+} from './lib/storage.js';
 import { PROVIDERS, providerFor } from './lib/providers.js';
 import { listModels } from './lib/llm.js';
 
@@ -124,6 +126,7 @@ async function renderSettings() {
   el('self-heal').checked = draft.selfHealEnabled;
   el('llm-advice').checked = draft.llmAdviceEnabled;
   el('snippet-chars').value = draft.maxSnippetChars;
+  el('dashboard-origin').value = draft.dashboardOrigin || '';
   setDirty(false);
   renderAgentState();
 }
@@ -343,6 +346,129 @@ el('save-position').addEventListener('click', async () => {
   setStatus(el('position-status'), `Saved ${ticker}.`);
 });
 
+/* ------------------------------------------------------------------ *
+ * Site access
+ * ------------------------------------------------------------------ */
+
+/** The `https://host/*` pattern one quote-page URL needs permission for. */
+export function originPatternFor(url) {
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return null;
+    return `${parsed.protocol}//${parsed.host}/*`;
+  } catch {
+    return null;
+  }
+}
+
+/** Every distinct origin the watchlist would need to refresh itself. */
+export function originsInWatchlist(watchlist) {
+  const origins = new Map();
+  for (const entry of Object.values(watchlist || {})) {
+    const origin = originPatternFor(entry && entry.source_url);
+    if (!origin) continue;
+    if (!origins.has(origin)) origins.set(origin, []);
+    origins.get(origin).push(entry.ticker);
+  }
+  return origins;
+}
+
+async function renderAccess() {
+  const list = el('access-list');
+  const origins = originsInWatchlist(await getWatchlist());
+  list.replaceChildren();
+
+  if (!origins.size) {
+    const empty = document.createElement('p');
+    empty.className = 'hint';
+    empty.textContent = 'Nothing on the watchlist yet, so there is nothing to grant.';
+    list.appendChild(empty);
+    return;
+  }
+
+  for (const [origin, tickers] of origins) {
+    const granted = await chrome.permissions.contains({ origins: [origin] });
+    const row = document.createElement('div');
+    row.className = 'row-item';
+
+    const label = document.createElement('div');
+    const host = document.createElement('strong');
+    host.textContent = origin.replace(/^https?:\/\//, '').replace(/\/\*$/, '');
+    const who = document.createElement('span');
+    who.className = 'hint';
+    who.textContent = ` ${tickers.sort().join(', ')}`;
+    label.append(host, who);
+
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = granted ? 'btn small' : 'btn primary small';
+    button.textContent = granted ? 'Revoke' : 'Grant';
+    // Called straight from the click: Chrome only honours a permission request
+    // inside the gesture that started it.
+    button.addEventListener('click', async () => {
+      try {
+        const changed = granted
+          ? await chrome.permissions.remove({ origins: [origin] })
+          : await chrome.permissions.request({ origins: [origin] });
+        setStatus(el('access-status'), changed
+          ? `${granted ? 'Revoked' : 'Granted'} access to ${host.textContent}.`
+          : 'Nothing changed.');
+      } catch (error) {
+        setStatus(el('access-status'), String((error && error.message) || error), true);
+      }
+      await renderAccess();
+    });
+
+    row.append(label, button);
+    list.appendChild(row);
+  }
+}
+
+/* ------------------------------------------------------------------ *
+ * Dashboard
+ * ------------------------------------------------------------------ */
+
+/**
+ * Builds the URL the "Open dashboard" button goes to.
+ *
+ * With no origin configured this is the copy inside the extension, which needs
+ * nothing running. With one configured it is that origin, carrying `?ext=` so
+ * nobody has to copy an extension ID out of chrome://extensions by hand — the
+ * page remembers it after the first visit.
+ *
+ * Exported for the tests; the origin is user-typed, so it is parsed rather
+ * than concatenated.
+ */
+export function dashboardUrl(origin, extensionId) {
+  const trimmed = String(origin || '').trim();
+  if (!trimmed) return chrome.runtime.getURL(DASHBOARD_PATH);
+  let parsed;
+  try {
+    parsed = new URL(trimmed);
+  } catch {
+    throw new Error('That is not a URL. Try http://localhost:8080.');
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    throw new Error('The dashboard address must be an http(s) URL.');
+  }
+  if (extensionId) parsed.searchParams.set('ext', extensionId);
+  return parsed.href;
+}
+
+el('open-dashboard').addEventListener('click', async () => {
+  const origin = el('dashboard-origin').value.trim();
+  let url;
+  try {
+    url = dashboardUrl(origin, chrome.runtime.id);
+  } catch (error) {
+    setStatus(el('dashboard-status'), String(error.message), true);
+    return;
+  }
+  // Remembered so the next visit does not need it typed again.
+  await saveSettings({ dashboardOrigin: origin });
+  await chrome.tabs.create({ url });
+});
+
 el('reset-registry').addEventListener('click', async () => {
   await chrome.runtime.sendMessage({ type: MSG.RESET_SELECTORS });
   await renderRegistry();
@@ -383,7 +509,7 @@ function trackSections() {
 }
 
 (async function init() {
-  await Promise.all([renderSettings(), renderPortfolio(), renderRegistry(), renderHealLog()]);
+  await Promise.all([renderSettings(), renderPortfolio(), renderRegistry(), renderHealLog(), renderAccess()]);
   shownProvider = el('provider').value;
   trackSections();
 })();

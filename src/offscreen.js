@@ -1,21 +1,42 @@
 /**
  * Offscreen document — the extension's HTML parser.
  *
- * The MV3 service worker has no DOM, so the heavy work of sanitizing a scraped
- * container (dropping ads/nav/inline payloads, stripping volatile attributes,
- * budgeting the fragment down to something worth sending to an LLM) happens
- * here instead of on the user's active tab.
+ * The MV3 service worker has no DOM, so anything that needs one happens here
+ * instead of on the user's active tab. Two jobs:
+ *
+ *   SANITIZE_HTML   Trim a scraped container down to something worth sending to
+ *                   a model: drop ads, nav and inline payloads, strip volatile
+ *                   attributes, hold to a character budget.
+ *
+ *   EXTRACT_HTML    Run the selector registry against a page fetched without a
+ *                   browser, for a background refresh. Deliberately *not*
+ *                   sanitized first — the sanitizer removes exactly the hooks
+ *                   selectors match on.
+ *
+ * A `Document` cannot cross the message boundary, so the extraction runs here
+ * and only the resulting values are sent back.
  */
 import { MSG, OFFSCREEN_TARGET } from './lib/constants.js';
 import { sanitizeSnippet } from './lib/sanitize.js';
+import { extractAll } from './lib/extract-core.js';
+
+const parse = (html) => new DOMParser().parseFromString(String(html || ''), 'text/html');
+
+const HANDLERS = {
+  [MSG.SANITIZE_HTML]({ html, maxChars }) {
+    return sanitizeSnippet(parse(html).body, { maxChars });
+  },
+  [MSG.EXTRACT_HTML]({ html, candidates }) {
+    return extractAll(parse(html), candidates || {});
+  },
+};
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (!message || message.target !== OFFSCREEN_TARGET) return undefined;
-  if (message.type !== MSG.SANITIZE_HTML) return undefined;
+  const handler = HANDLERS[message.type];
+  if (!handler) return undefined;
   try {
-    const { html, maxChars } = message.payload || {};
-    const parsed = new DOMParser().parseFromString(String(html || ''), 'text/html');
-    sendResponse({ ok: true, ...sanitizeSnippet(parsed.body, { maxChars }) });
+    sendResponse({ ok: true, ...handler(message.payload || {}) });
   } catch (error) {
     sendResponse({ ok: false, error: String((error && error.message) || error) });
   }

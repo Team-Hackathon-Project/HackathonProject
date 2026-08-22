@@ -6,7 +6,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { makeStorage, installChrome, uninstallChrome, stubFetch, messageResponse } from './helpers.mjs';
-import { MSG, STORAGE_KEYS } from '../src/lib/constants.js';
+import { MSG, WORKER_MESSAGES, STORAGE_KEYS } from '../src/lib/constants.js';
 import { HEALTHY_PAGE, BROKEN_PAGE, MISLEADING_PAGE, MISLEADING_ONLY_PAGE, INDEX_RAIL_PAGE } from './fixtures/pages.mjs';
 import { makePage, loadContentScript } from './helpers.mjs';
 
@@ -472,7 +472,46 @@ test('the message router answers every documented request type', async () => {
   const reset = await background.handleRequest({ type: MSG.RESET_SELECTORS });
   assert.deepEqual(reset.registry, {});
 
+  // The dashboard's requests ride the same router, so an unhandled name here
+  // would be a message the website can send and never get an answer to.
+  const dashboard = await background.handleRequest({ type: MSG.GET_DASHBOARD_STATE });
+  assert.ok(dashboard.watchlist);
+  assert.ok(dashboard.priceHistory);
+  assert.equal(dashboard.decisions.length, 1);
+  assert.equal(dashboard.settings.providers, undefined);
+
+  await background.handleRequest({ type: MSG.ADD_WATCH, payload: { ticker: 'AAPL' } });
+  const monitored = await background.handleRequest({
+    type: MSG.SET_WATCH_MONITOR, payload: { ticker: 'AAPL', monitor: false },
+  });
+  assert.equal(monitored.entry.monitor, false);
+  assert.equal((await background.handleRequest({ type: MSG.REMOVE_WATCH, payload: { ticker: 'AAPL' } })).removed, true);
+
+  const history = await background.handleRequest({ type: MSG.GET_PRICE_HISTORY, payload: { ticker: 'AAPL' } });
+  assert.deepEqual(history, { ticker: 'AAPL', history: [] });
+
+  // Every message the worker claims to own must actually be routed.
+  for (const type of WORKER_MESSAGES) {
+    await assert.doesNotReject(
+      async () => {
+        try {
+          await background.handleRequest({ type, payload: { ticker: 'AAPL' } });
+        } catch (error) {
+          // A handler that refuses its input has still been reached; only an
+          // unrouted name is a failure here.
+          if (/Unknown message type/.test(error.message)) throw error;
+        }
+      },
+      `${type} is not routed`
+    );
+  }
+
   await assert.rejects(() => background.handleRequest({ type: 'NOPE' }), /Unknown message type/);
+
+  // And nothing may be on that list twice, or be a name that does not exist.
+  assert.equal(new Set(WORKER_MESSAGES).size, WORKER_MESSAGES.length);
+  const known = new Set(Object.values(MSG));
+  for (const type of WORKER_MESSAGES) assert.ok(known.has(type), `${type} is not in MSG`);
 });
 
 test('a tab whose URL activeTab has not revealed yet is still scraped', async () => {

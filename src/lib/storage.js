@@ -3,7 +3,9 @@
  * the rest of the extension uses. Keeping every read/write here means the
  * storage shape is defined in exactly one place.
  */
-import { STORAGE_KEYS, DEFAULT_SETTINGS, MAX_DECISIONS, MAX_HEAL_LOG, MAX_PRICE_POINTS } from './constants.js';
+import {
+  STORAGE_KEYS, DEFAULT_SETTINGS, MAX_DECISIONS, MAX_HEAL_LOG, MAX_PRICE_POINTS, MAX_ALERTS,
+} from './constants.js';
 
 function area() {
   if (typeof chrome === 'undefined' || !chrome.storage || !chrome.storage.local) {
@@ -65,6 +67,193 @@ export async function savePosition(ticker, position) {
   else portfolio[ticker] = { ...(portfolio[ticker] || {}), ...position };
   await setRaw({ [STORAGE_KEYS.PORTFOLIO]: portfolio });
   return portfolio;
+}
+
+/* ------------------------------------------------------------------ *
+ * Watchlist
+ *
+ * The set of tickers the dashboard shows. Kept separate from `portfolio`
+ * because watching something and owning it are different claims: you can track
+ * a stock you have never bought, and you can hold one you would rather not be
+ * reminded about. `source_url` is the part that matters operationally — it is
+ * the page a refresh goes back to.
+ * ------------------------------------------------------------------ */
+
+export async function getWatchlist() {
+  const stored = await getRaw(STORAGE_KEYS.WATCHLIST);
+  return stored[STORAGE_KEYS.WATCHLIST] || {};
+}
+
+export async function saveWatchlist(watchlist) {
+  await setRaw({ [STORAGE_KEYS.WATCHLIST]: watchlist });
+  return watchlist;
+}
+
+/**
+ * Adds or updates one watched ticker, merging over whatever is already there.
+ *
+ * Merging matters: a scan knows a fresh `source_url` but nothing about whether
+ * the user has since switched monitoring off, and it must not clobber that.
+ */
+export async function saveWatchEntry(ticker, patch = {}) {
+  const symbol = String(ticker || '').trim().toUpperCase();
+  if (!symbol) return null;
+  const watchlist = await getWatchlist();
+  const existing = watchlist[symbol] || null;
+  watchlist[symbol] = {
+    ticker: symbol,
+    source_url: null,
+    monitor: true,
+    added_at: new Date().toISOString(),
+    last_refreshed_at: null,
+    last_error: null,
+    last_method: null,
+    ...(existing || {}),
+    ...patch,
+    ticker: symbol,
+  };
+  await saveWatchlist(watchlist);
+  return watchlist[symbol];
+}
+
+export async function removeWatchEntry(ticker) {
+  const symbol = String(ticker || '').trim().toUpperCase();
+  const watchlist = await getWatchlist();
+  if (!watchlist[symbol]) return false;
+  delete watchlist[symbol];
+  await saveWatchlist(watchlist);
+  return true;
+}
+
+/**
+ * Back-fills the watchlist from snapshots taken before the watchlist existed,
+ * once. Every snapshot already carries the `source_url` it came from, so an
+ * upgrading user opens the dashboard to their real history rather than to an
+ * empty page.
+ *
+ * The `watchlistSeeded` flag is what stops this from resurrecting tickers the
+ * user has since deliberately removed.
+ */
+export async function seedWatchlistFromSnapshots() {
+  const settings = await getSettings();
+  if (settings.watchlistSeeded) return { seeded: false, added: [] };
+
+  const snapshots = await getSnapshots();
+  const watchlist = await getWatchlist();
+  const added = [];
+  for (const [ticker, snapshot] of Object.entries(snapshots)) {
+    if (watchlist[ticker] || !snapshot) continue;
+    watchlist[ticker] = {
+      ticker,
+      source_url: snapshot.source_url || null,
+      monitor: true,
+      added_at: snapshot.extracted_at || new Date().toISOString(),
+      last_refreshed_at: snapshot.extracted_at || null,
+      last_error: null,
+      last_method: null,
+    };
+    added.push(ticker);
+  }
+  if (added.length) await saveWatchlist(watchlist);
+  await saveSettings({ watchlistSeeded: true });
+  return { seeded: true, added };
+}
+
+/* ------------------------------------------------------------------ *
+ * Alert rules and the alerts they raise
+ * ------------------------------------------------------------------ */
+
+export async function getAlertRules(ticker = null) {
+  const stored = await getRaw(STORAGE_KEYS.ALERT_RULES);
+  const rules = stored[STORAGE_KEYS.ALERT_RULES] || {};
+  return ticker ? (rules[ticker] || []) : rules;
+}
+
+/** Adds or replaces one rule, matched on id. */
+export async function saveAlertRule(rule) {
+  if (!rule || !rule.ticker || !rule.id) return null;
+  const all = await getAlertRules();
+  const forTicker = [...(all[rule.ticker] || [])];
+  const index = forTicker.findIndex((existing) => existing.id === rule.id);
+  if (index === -1) forTicker.push(rule);
+  else forTicker[index] = { ...forTicker[index], ...rule };
+  all[rule.ticker] = forTicker;
+  await setRaw({ [STORAGE_KEYS.ALERT_RULES]: all });
+  return rule;
+}
+
+/**
+ * Folds the per-rule bookkeeping from one evaluation back into storage.
+ *
+ * Separate from `saveAlertRule` because it is the hot path: a monitor pass
+ * writes these on every tick, and it must not disturb anything the user has
+ * edited in the meantime beyond the fields it owns.
+ */
+export async function applyRuleUpdates(updates = {}) {
+  const ids = Object.keys(updates);
+  if (!ids.length) return null;
+  const all = await getAlertRules();
+  for (const [ticker, rules] of Object.entries(all)) {
+    all[ticker] = rules.map((rule) => (updates[rule.id] ? { ...rule, ...updates[rule.id] } : rule));
+  }
+  await setRaw({ [STORAGE_KEYS.ALERT_RULES]: all });
+  return all;
+}
+
+export async function deleteAlertRule(ticker, ruleId) {
+  const all = await getAlertRules();
+  const forTicker = all[ticker] || [];
+  const remaining = forTicker.filter((rule) => rule.id !== ruleId);
+  if (remaining.length === forTicker.length) return false;
+  if (remaining.length) all[ticker] = remaining;
+  else delete all[ticker];
+  await setRaw({ [STORAGE_KEYS.ALERT_RULES]: all });
+  return true;
+}
+
+/** Drops every rule for a ticker, for when it leaves the watchlist. */
+export async function deleteAlertRulesFor(ticker) {
+  const all = await getAlertRules();
+  if (!all[ticker]) return false;
+  delete all[ticker];
+  await setRaw({ [STORAGE_KEYS.ALERT_RULES]: all });
+  return true;
+}
+
+export async function getAlerts() {
+  const stored = await getRaw(STORAGE_KEYS.ALERTS);
+  return stored[STORAGE_KEYS.ALERTS] || [];
+}
+
+/** Records alerts newest-first, skipping any id already present. */
+export async function recordAlerts(alerts = []) {
+  if (!alerts.length) return getAlerts();
+  const existing = await getAlerts();
+  const seen = new Set(existing.map((alert) => alert.id));
+  const fresh = alerts.filter((alert) => alert && !seen.has(alert.id));
+  if (!fresh.length) return existing;
+  const list = [...fresh, ...existing].slice(0, MAX_ALERTS);
+  await setRaw({ [STORAGE_KEYS.ALERTS]: list });
+  return list;
+}
+
+export async function markAlertsSeen(ids = null) {
+  const alerts = await getAlerts();
+  const wanted = ids === null ? null : new Set(ids);
+  const list = alerts.map((alert) => (
+    wanted === null || wanted.has(alert.id) ? { ...alert, seen: true } : alert
+  ));
+  await setRaw({ [STORAGE_KEYS.ALERTS]: list });
+  return list;
+}
+
+export async function clearAlerts() {
+  await setRaw({ [STORAGE_KEYS.ALERTS]: [] });
+  return [];
+}
+
+export async function countUnseenAlerts() {
+  return (await getAlerts()).filter((alert) => !alert.seen).length;
 }
 
 export async function getRegistry() {

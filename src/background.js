@@ -11,6 +11,8 @@
  */
 import {
   MSG, OFFSCREEN_TARGET, OFFSCREEN_PATH, FIELDS, SNIPPET_LIMIT, FIELD_LABELS, FIELD_PHRASES, HEALABLE_FIELDS,
+  EXTERNAL_ALLOWED, REFRESH_FETCH_TIMEOUT_MS, REFRESH_TAB_TIMEOUT_MS, REFRESH_GAP_MS,
+  MONITOR_ALARM, MIN_MONITOR_MINUTES, MAX_MONITOR_MINUTES, DASHBOARD_PATH,
 } from './lib/constants.js';
 import { candidatesFor, isPlausibleSelector } from './lib/selectors.js';
 import { buildSnapshot, isUsableSnapshot, valueFitsField, tickerFromUrl } from './lib/normalize.js';
@@ -22,8 +24,12 @@ import {
   getSettings, getPortfolio, getRegistry, recordHealedSelector, clearRegistry, forgetHealedSelector,
   saveSnapshot, getSnapshots, recordDecision, getDecisions, recordHealEvent, getHealLog,
   recordPricePoint, getPriceHistory, savePosition,
+  getWatchlist, saveWatchEntry, removeWatchEntry, seedWatchlistFromSnapshots,
+  getAlertRules, saveAlertRule, applyRuleUpdates, deleteAlertRule, deleteAlertRulesFor,
+  getAlerts, recordAlerts, markAlertsSeen, clearAlerts, countUnseenAlerts, saveSettings,
 } from './lib/storage.js';
 import { suggestTargets } from './lib/targets.js';
+import { evaluateRules, normalizeRule, defaultRulesFor } from './lib/alerts.js';
 
 /** How far down the candidate list one bad match may push us. */
 const MAX_CANDIDATE_RETRIES = 4;
@@ -144,6 +150,26 @@ function hostOf(url) {
   } catch {
     return '';
   }
+}
+
+const tickerOf = (value) => String(value || '').trim().toUpperCase() || null;
+
+/** Empty string and undefined mean "not set", which is not the same as zero. */
+function numberOrNull(value) {
+  if (value === null || value === undefined || value === '') return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+/**
+ * Where to look up a ticker the user typed rather than scanned.
+ *
+ * stockanalysis.com renders its quotes server-side and is already in the
+ * shipped selector registry, so it is the one default that works without a
+ * browser tab having to render the page first.
+ */
+function defaultQuoteUrl(ticker) {
+  return `https://stockanalysis.com/stocks/${encodeURIComponent(String(ticker).toLowerCase())}/`;
 }
 
 /** Sends a message to the tab, resolving to null instead of throwing. */
@@ -463,6 +489,15 @@ export async function scrapeActiveTab() {
     // Every usable scan is one more data point the target suggester can average
     // over, so record it before recomputing anything from it.
     await recordPricePoint(snapshot);
+    // Scanning a ticker is the clearest statement of interest there is, so it
+    // is also what puts it on the dashboard. The URL is recorded with it
+    // because that is the page a later refresh has to go back to.
+    await saveWatchEntry(snapshot.ticker, {
+      source_url: snapshot.source_url,
+      last_refreshed_at: snapshot.extracted_at,
+      last_method: 'tab',
+      last_error: null,
+    });
     targets = await refreshAutoTargets(snapshot);
   } else if (!stuck) {
     // Name what was actually missing: "could not read both" is wrong half the
@@ -512,6 +547,394 @@ async function refreshAutoTargets(snapshot) {
     targets_updated_at: new Date().toISOString(),
   });
   return { ...suggestion, applied: true };
+}
+
+/* ------------------------------------------------------------------ *
+ * Background refresh
+ *
+ * Re-reads a quote page the user is not looking at. Two ways, in order of how
+ * much they cost:
+ *
+ *   1. fetch the page and run the selectors over the served HTML. Silent, fast,
+ *      and no tab appears. It only works on a server-rendered quote page --
+ *      plenty of finance sites paint the price with JavaScript and serve HTML
+ *      that does not contain it anywhere.
+ *
+ *   2. open the page in a background tab and run the real content script in it.
+ *      Slower, and briefly visible in the tab strip, but it is a real render, so
+ *      it works everywhere the popup does -- including the self-healing path.
+ *
+ * Neither runs without the user having granted access to that origin, which is
+ * asked for one host at a time, from a gesture, and can be taken back.
+ * ------------------------------------------------------------------ */
+
+/** The `https://host/*` pattern one URL needs permission for. */
+export function originPatternFor(url) {
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return null;
+    return `${parsed.protocol}//${parsed.host}/*`;
+  } catch {
+    return null;
+  }
+}
+
+async function hasOriginAccess(url) {
+  const origin = originPatternFor(url);
+  if (!origin) return false;
+  try {
+    return await chrome.permissions.contains({ origins: [origin] });
+  } catch {
+    return false;
+  }
+}
+
+/** `fetch` with a deadline, so one unresponsive host cannot stall a pass. */
+async function fetchWithTimeout(url, timeoutMs) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, { signal: controller.signal, credentials: 'omit', redirect: 'follow' });
+    if (!response.ok) throw new Error(`the page returned HTTP ${response.status}`);
+    return await response.text();
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** Runs the candidate map over fetched HTML, in the offscreen document. */
+async function extractFromHtml(html, candidates) {
+  await ensureOffscreen();
+  const response = await chrome.runtime.sendMessage({
+    target: OFFSCREEN_TARGET,
+    type: MSG.EXTRACT_HTML,
+    payload: { html, candidates },
+  });
+  if (!response || !response.ok) {
+    throw new Error((response && response.error) || 'the offscreen parser returned no result');
+  }
+  return response;
+}
+
+/** Resolves once the tab finishes loading, or rejects on the deadline. */
+function waitForTabComplete(tabId, timeoutMs) {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const finish = (error) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      chrome.tabs.onUpdated.removeListener(listener);
+      if (error) reject(error);
+      else resolve();
+    };
+    const listener = (id, info) => {
+      if (id === tabId && info.status === 'complete') finish(null);
+    };
+    const timer = setTimeout(() => finish(new Error('the page took too long to load')), timeoutMs);
+    chrome.tabs.onUpdated.addListener(listener);
+    // The tab may already have finished before the listener was attached.
+    chrome.tabs.get(tabId)
+      .then((tab) => { if (tab && tab.status === 'complete') finish(null); })
+      .catch(() => finish(new Error('the tab went away')));
+  });
+}
+
+/**
+ * Opens the page in an inactive tab, extracts, and always closes the tab again.
+ *
+ * `active: false` keeps the user where they were. The close runs in a `finally`
+ * because a tab left behind by a failed refresh is the kind of litter that
+ * accumulates silently over a day of monitoring.
+ */
+async function extractFromTab(url, candidates, anchorText) {
+  const tab = await chrome.tabs.create({ url, active: false });
+  try {
+    await waitForTabComplete(tab.id, REFRESH_TAB_TIMEOUT_MS);
+    await ensureContentScript(tab.id);
+    const result = await sendToTab(tab.id, {
+      type: MSG.EXTRACT,
+      payload: { candidates, snippetLimit: SNIPPET_LIMIT, anchorText },
+    });
+    if (!result || !result.ok) throw new Error((result && result.error) || 'the page did not answer');
+    return result;
+  } finally {
+    try {
+      await chrome.tabs.remove(tab.id);
+    } catch {
+      // Already gone, or the window closed underneath us. Nothing to clean up.
+    }
+  }
+}
+
+/** Records a failed refresh on the entry and returns the failure. */
+async function refreshFailed(symbol, error, extra = {}) {
+  await saveWatchEntry(symbol, {
+    last_error: error,
+    last_refreshed_at: new Date().toISOString(),
+    ...extra,
+  });
+  return { ticker: symbol, ok: false, error, ...extra };
+}
+
+/**
+ * Refreshes one watched ticker and records what it found.
+ *
+ * Never throws: a pass over a watchlist must not stop because one host is down.
+ * The failure is written to the watchlist entry, where the dashboard shows it
+ * on that ticker's card.
+ */
+export async function refreshTicker(ticker, { allowTab = true } = {}) {
+  const symbol = tickerOf(ticker);
+  const watchlist = await getWatchlist();
+  const entry = watchlist[symbol];
+  if (!entry) return { ticker: symbol, ok: false, error: `${symbol} is not on the watchlist.` };
+
+  const url = entry.source_url;
+  if (!url || !isScrapableUrl(url)) {
+    return refreshFailed(symbol, 'No quote page URL is stored for this ticker.');
+  }
+  if (!(await hasOriginAccess(url))) {
+    const origin = originPatternFor(url);
+    return refreshFailed(symbol, `Access to ${hostOf(url)} has not been granted.`, { needs_permission: origin });
+  }
+
+  const registry = await getRegistry();
+  const candidates = await buildCandidateMap(hostOf(url), registry);
+  const anchorText = tickerFromUrl(url) || symbol;
+
+  let result = null;
+  let method = null;
+  const notes = [];
+
+  // 1. The cheap path: no tab, no render.
+  try {
+    const html = await fetchWithTimeout(url, REFRESH_FETCH_TIMEOUT_MS);
+    const extracted = await extractFromHtml(html, candidates);
+    if (valueFitsField('price', extracted.raw.price)) {
+      result = extracted;
+      method = 'fetch';
+    } else {
+      notes.push('the served HTML carried no price');
+    }
+  } catch (error) {
+    notes.push(`fetch failed (${String((error && error.message) || error)})`);
+  } finally {
+    await closeOffscreen();
+  }
+
+  // 2. The real render, for the pages that paint their price with JavaScript.
+  if (!result && allowTab) {
+    try {
+      result = await extractFromTab(url, candidates, anchorText);
+      method = 'tab';
+    } catch (error) {
+      notes.push(`opening the page failed (${String((error && error.message) || error)})`);
+    }
+  }
+
+  if (!result) return refreshFailed(symbol, notes.join('; ') || 'the page could not be read');
+
+  const selectorsUsed = {};
+  for (const [field, used] of Object.entries(result.used || {})) {
+    selectorsUsed[`${field}_selector`] = used.selector;
+  }
+  const snapshot = buildSnapshot(result.raw, { source_url: url, selectors_used: selectorsUsed });
+
+  // A price read off the wrong page is worse than no reading at all: it would be
+  // filed under this symbol and charted as its history.
+  if (snapshot.ticker && snapshot.ticker !== symbol) {
+    return refreshFailed(symbol, `that page reported ${snapshot.ticker}, not ${symbol}`);
+  }
+  snapshot.ticker = symbol;
+
+  if (!isUsableSnapshot(snapshot)) {
+    return refreshFailed(symbol, 'no price could be read from that page');
+  }
+
+  // The same page-global-price check the interactive scrape runs.
+  const stuck = findStuckPrice({ snapshot, snapshots: await getSnapshots() });
+  if (stuck) {
+    return refreshFailed(symbol, `${stuck.host} reports the same ${stuck.price} for ${symbol} and ${stuck.ticker}`);
+  }
+
+  const previous = (await getSnapshots())[symbol] || null;
+  await saveSnapshot(snapshot);
+  await recordPricePoint(snapshot);
+  await refreshAutoTargets(snapshot);
+  await saveWatchEntry(symbol, {
+    last_refreshed_at: snapshot.extracted_at,
+    last_method: method,
+    last_error: null,
+    needs_permission: null,
+  });
+
+  return { ticker: symbol, ok: true, method, snapshot, previous, notes };
+}
+
+/**
+ * Refreshes every monitored ticker, one at a time.
+ *
+ * Sequential and spaced out on purpose. A watchlist of twenty tickers fired in
+ * parallel is twenty simultaneous requests to a handful of finance sites, which
+ * is both rude and the fastest way to be rate-limited.
+ */
+export async function refreshAll({ onlyMonitored = true } = {}) {
+  const watchlist = await getWatchlist();
+  const tickers = Object.keys(watchlist)
+    .filter((ticker) => (onlyMonitored ? watchlist[ticker].monitor !== false : true))
+    .sort();
+
+  const results = [];
+  for (const [index, ticker] of tickers.entries()) {
+    if (index > 0) await new Promise((resolve) => setTimeout(resolve, REFRESH_GAP_MS));
+    results.push(await refreshTicker(ticker));
+  }
+  return {
+    refreshed: results.filter((result) => result.ok).length,
+    failed: results.filter((result) => !result.ok).length,
+    results,
+  };
+}
+
+/* ------------------------------------------------------------------ *
+ * Alerts and the monitor loop
+ *
+ * The part of this that runs with nobody watching. A `chrome.alarms` tick wakes
+ * the worker, refreshes what is being monitored, evaluates the rules against
+ * each new reading, and raises anything that fired on three channels at once:
+ * an OS notification, the toolbar badge, and the stored feed the dashboard
+ * renders. The three are deliberate — a notification can be suppressed by the
+ * operating system without telling anyone, so it is never the only record.
+ * ------------------------------------------------------------------ */
+
+/** Keeps the toolbar badge showing how many alerts have not been looked at. */
+async function refreshBadge() {
+  const unseen = await countUnseenAlerts();
+  try {
+    await chrome.action.setBadgeText({ text: unseen ? String(Math.min(unseen, 99)) : '' });
+    if (unseen) await chrome.action.setBadgeBackgroundColor({ color: '#b4532c' });
+  } catch {
+    // Badge support is not worth failing a monitor pass over.
+  }
+}
+
+/**
+ * Raises one alert as an OS notification.
+ *
+ * The notification id is the alert id, so clicking it can find the alert again,
+ * and a repeat of the same alert replaces rather than stacks.
+ */
+async function notify(alert) {
+  try {
+    await chrome.notifications.create(alert.id, {
+      type: 'basic',
+      iconUrl: chrome.runtime.getURL('src/icons/icon128.png'),
+      title: alert.title,
+      message: alert.body,
+      contextMessage: 'Recommendation only — you decide.',
+      priority: 1,
+    });
+  } catch (error) {
+    // Focus Assist, Do Not Disturb, or a platform without notifications. The
+    // badge and the stored feed still carry it, which is why they exist.
+    console.warn('[market-scraper] could not raise a notification:', error);
+  }
+}
+
+/**
+ * The advisory an advice_flip rule compares against.
+ *
+ * Uses the free local rules engine unless the user has explicitly opted into
+ * spending a model call per ticker per pass. A monitor loop is the one place
+ * where an LLM call is charged on a timer rather than on a click.
+ */
+async function verdictFor(snapshot, settings, position) {
+  if (!settings.alertsUseLlm) return heuristicAdvice(snapshot, position);
+  try {
+    return await adviseOn(snapshot);
+  } catch {
+    return heuristicAdvice(snapshot, position);
+  }
+}
+
+/**
+ * Evaluates one ticker's rules against a fresh reading and raises what fired.
+ *
+ * Exported so a test can drive it without an alarm.
+ */
+export async function evaluateAlertsFor(ticker, { snapshot, previous }) {
+  const rules = await getAlertRules(ticker);
+  if (!rules.length) return [];
+
+  const settings = await getSettings();
+  const portfolio = await getPortfolio();
+  const position = portfolio[ticker] || null;
+
+  // Only pay for a verdict when a rule actually asks for one.
+  const wantsAdvice = rules.some((rule) => rule.kind === 'advice_flip' && rule.enabled !== false);
+  const advice = wantsAdvice ? await verdictFor(snapshot, settings, position || {}) : null;
+
+  const { alerts, updates } = evaluateRules({
+    rules,
+    snapshot,
+    previous,
+    position,
+    history: await getPriceHistory(ticker),
+    advice,
+  });
+
+  await applyRuleUpdates(updates);
+  if (!alerts.length) return [];
+
+  await recordAlerts(alerts);
+  for (const alert of alerts) await notify(alert);
+  await refreshBadge();
+  return alerts;
+}
+
+/**
+ * One monitor pass: refresh everything monitored, then evaluate its rules.
+ *
+ * Rules are evaluated only for tickers whose refresh actually produced a new
+ * reading. Evaluating against a stale snapshot would re-fire on a crossing that
+ * happened hours ago.
+ */
+export async function runMonitorPass() {
+  const settings = await getSettings();
+  if (!settings.monitorEnabled) return { skipped: 'monitoring is off' };
+
+  const summary = await refreshAll({ onlyMonitored: true });
+  const raised = [];
+  for (const result of summary.results) {
+    if (!result.ok) continue;
+    raised.push(...await evaluateAlertsFor(result.ticker, result));
+  }
+  return { ...summary, alerts: raised.length };
+}
+
+/**
+ * Puts the monitor alarm in step with the settings.
+ *
+ * Chrome will not fire an alarm more than once a minute, and an interval longer
+ * than a day is indistinguishable from off, so the stored value is clamped
+ * rather than trusted.
+ */
+export async function syncMonitorAlarm(settings = null) {
+  const current = settings || await getSettings();
+  try {
+    await chrome.alarms.clear(MONITOR_ALARM);
+    if (!current.monitorEnabled) return { scheduled: false };
+    const minutes = Math.min(
+      MAX_MONITOR_MINUTES,
+      Math.max(MIN_MONITOR_MINUTES, Number(current.monitorIntervalMinutes) || 15)
+    );
+    await chrome.alarms.create(MONITOR_ALARM, { periodInMinutes: minutes, delayInMinutes: minutes });
+    return { scheduled: true, minutes };
+  } catch (error) {
+    console.warn('[market-scraper] could not schedule the monitor alarm:', error);
+    return { scheduled: false, error: String((error && error.message) || error) };
+  }
 }
 
 /* ------------------------------------------------------------------ *
@@ -603,6 +1026,156 @@ export async function handleRequest(message) {
     }
     case MSG.RESET_SELECTORS:
       return { registry: await clearRegistry() };
+    case MSG.GET_DASHBOARD_STATE: {
+      // One round trip for the whole dashboard. The popup's GET_STATE is left
+      // alone: it deliberately returns less, and the popup does not need more.
+      await seedWatchlistFromSnapshots();
+      const stored = await getSettings();
+      const llm = activeLlm(stored);
+      return {
+        // Never the key itself, on any transport — and this one can be a web page.
+        hasApiKey: Boolean(llm.apiKey),
+        provider: llm.provider.id,
+        providerLabel: llm.provider.label,
+        model: llm.model,
+        settings: {
+          selfHealEnabled: stored.selfHealEnabled,
+          llmAdviceEnabled: stored.llmAdviceEnabled,
+          dashboardOrigin: stored.dashboardOrigin,
+          monitorEnabled: stored.monitorEnabled,
+          monitorIntervalMinutes: stored.monitorIntervalMinutes,
+          alertsUseLlm: stored.alertsUseLlm,
+        },
+        watchlist: await getWatchlist(),
+        alertRules: await getAlertRules(),
+        alerts: await getAlerts(),
+        snapshots: await getSnapshots(),
+        portfolio: await getPortfolio(),
+        priceHistory: await getPriceHistory(),
+        decisions: await getDecisions(),
+        healLog: (await getHealLog()).slice(0, 20),
+        generated_at: new Date().toISOString(),
+      };
+    }
+    case MSG.GET_PRICE_HISTORY: {
+      const ticker = tickerOf(message.payload && message.payload.ticker);
+      return { ticker, history: await getPriceHistory(ticker) };
+    }
+    case MSG.ADD_WATCH: {
+      const payload = message.payload || {};
+      const ticker = tickerOf(payload.ticker);
+      if (!ticker) throw new Error('No ticker supplied.');
+      const sourceUrl = String(payload.source_url || '').trim();
+      if (sourceUrl && !isScrapableUrl(sourceUrl)) {
+        throw new Error('That is not an http(s) quote page URL.');
+      }
+      const entry = await saveWatchEntry(ticker, {
+        source_url: sourceUrl || defaultQuoteUrl(ticker),
+        monitor: payload.monitor !== false,
+      });
+      // A target rule costs nothing and does nothing until targets exist, so a
+      // new ticker starts watched rather than starting silent.
+      if (!(await getAlertRules(ticker)).length) {
+        for (const rule of defaultRulesFor(ticker)) await saveAlertRule(rule);
+      }
+      return { entry, rules: await getAlertRules(), watchlist: await getWatchlist() };
+    }
+    case MSG.REMOVE_WATCH: {
+      const ticker = tickerOf(message.payload && message.payload.ticker);
+      if (!ticker) throw new Error('No ticker supplied.');
+      const removed = await removeWatchEntry(ticker);
+      // Rules for a ticker nobody watches would fire on nothing forever.
+      await deleteAlertRulesFor(ticker);
+      return { removed, watchlist: await getWatchlist(), rules: await getAlertRules() };
+    }
+    case MSG.SET_WATCH_MONITOR: {
+      const payload = message.payload || {};
+      const ticker = tickerOf(payload.ticker);
+      if (!ticker) throw new Error('No ticker supplied.');
+      const watchlist = await getWatchlist();
+      if (!watchlist[ticker]) throw new Error(`${ticker} is not on the watchlist.`);
+      const entry = await saveWatchEntry(ticker, { monitor: Boolean(payload.monitor) });
+      return { entry, watchlist: await getWatchlist() };
+    }
+    case MSG.REFRESH_TICKER: {
+      const ticker = tickerOf(message.payload && message.payload.ticker);
+      if (!ticker) throw new Error('No ticker supplied.');
+      return refreshTicker(ticker);
+    }
+    case MSG.REFRESH_ALL:
+      return refreshAll({ onlyMonitored: !(message.payload && message.payload.includePaused) });
+    case MSG.GET_HOST_ACCESS: {
+      // Which of the watched hosts the extension may actually read. The
+      // dashboard uses this to show what still needs granting; it cannot do the
+      // granting itself, because that needs a gesture on an extension page.
+      const watchlist = await getWatchlist();
+      const hosts = {};
+      for (const entry of Object.values(watchlist)) {
+        const origin = originPatternFor(entry.source_url);
+        if (!origin || origin in hosts) continue;
+        hosts[origin] = await hasOriginAccess(entry.source_url);
+      }
+      return { hosts };
+    }
+    case MSG.SAVE_ALERT_RULE: {
+      const rule = normalizeRule(message.payload || {});
+      if (!rule) throw new Error('That rule is incomplete — it could never fire.');
+      await saveAlertRule(rule);
+      return { rule, rules: await getAlertRules() };
+    }
+    case MSG.DELETE_ALERT_RULE: {
+      const payload = message.payload || {};
+      const ticker = tickerOf(payload.ticker);
+      const removed = await deleteAlertRule(ticker, String(payload.id || ''));
+      return { removed, rules: await getAlertRules() };
+    }
+    case MSG.MARK_ALERTS_SEEN: {
+      const ids = (message.payload && message.payload.ids) || null;
+      const alerts = await markAlertsSeen(ids);
+      await refreshBadge();
+      return { alerts };
+    }
+    case MSG.CLEAR_ALERTS: {
+      const alerts = await clearAlerts();
+      await refreshBadge();
+      return { alerts };
+    }
+    case MSG.SET_MONITOR: {
+      const payload = message.payload || {};
+      const patch = {};
+      if ('enabled' in payload) patch.monitorEnabled = Boolean(payload.enabled);
+      if ('intervalMinutes' in payload) {
+        const minutes = Number(payload.intervalMinutes);
+        if (!Number.isFinite(minutes) || minutes < MIN_MONITOR_MINUTES) {
+          throw new Error(`The interval must be at least ${MIN_MONITOR_MINUTES} minute.`);
+        }
+        patch.monitorIntervalMinutes = Math.min(MAX_MONITOR_MINUTES, Math.round(minutes));
+      }
+      const settings = await saveSettings(patch);
+      const alarm = await syncMonitorAlarm(settings);
+      return {
+        monitorEnabled: settings.monitorEnabled,
+        monitorIntervalMinutes: settings.monitorIntervalMinutes,
+        ...alarm,
+      };
+    }
+    case MSG.SAVE_POSITION: {
+      const payload = message.payload || {};
+      const ticker = tickerOf(payload.ticker);
+      if (!ticker) throw new Error('No ticker supplied.');
+      const position = {};
+      for (const field of ['shares', 'avg_cost', 'target_buy_below', 'target_sell_above']) {
+        if (field in payload) position[field] = numberOrNull(payload[field]);
+      }
+      if ('auto_targets' in payload) position.auto_targets = Boolean(payload.auto_targets);
+      const portfolio = await savePosition(ticker, position);
+      return { ticker, position: portfolio[ticker], portfolio };
+    }
+    case MSG.DELETE_POSITION: {
+      const ticker = tickerOf(message.payload && message.payload.ticker);
+      if (!ticker) throw new Error('No ticker supplied.');
+      return { ticker, portfolio: await savePosition(ticker, null) };
+    }
     case MSG.SUGGEST_TARGETS: {
       const ticker = String((message.payload && message.payload.ticker) || '').trim().toUpperCase();
       if (!ticker) throw new Error('No ticker supplied.');
@@ -641,6 +1214,79 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   // Offscreen traffic rides the same bus; leave it to the offscreen listener.
   if (!message || typeof message.type !== 'string' || message.target === OFFSCREEN_TARGET) return undefined;
   handleRequest(message)
+    .then((data) => sendResponse({ ok: true, data }))
+    .catch((error) => sendResponse({ ok: false, error: String((error && error.message) || error) }));
+  return true; // response is asynchronous
+});
+
+/* ------------------------------------------------------------------ *
+ * Lifecycle listeners
+ *
+ * Registered at the top level, synchronously, because the worker is torn down
+ * between events and only listeners attached during evaluation survive that.
+ * ------------------------------------------------------------------ */
+
+chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name !== MONITOR_ALARM) return;
+  runMonitorPass().catch((error) => {
+    console.warn('[market-scraper] the monitor pass failed:', error);
+  });
+});
+
+// A browser restart or an update clears alarms; re-arm from what was stored.
+chrome.runtime.onStartup.addListener(() => { syncMonitorAlarm(); });
+chrome.runtime.onInstalled.addListener(() => { syncMonitorAlarm(); refreshBadge(); });
+
+/**
+ * Clicking a notification opens the dashboard at that ticker and marks the
+ * alert seen — a notification acted on should not still be counted as unread.
+ */
+chrome.notifications.onClicked.addListener((notificationId) => {
+  (async () => {
+    const alert = (await getAlerts()).find((entry) => entry.id === notificationId);
+    await markAlertsSeen([notificationId]);
+    await refreshBadge();
+    const url = chrome.runtime.getURL(
+      alert ? `${DASHBOARD_PATH}?ticker=${encodeURIComponent(alert.ticker)}` : DASHBOARD_PATH
+    );
+    await chrome.tabs.create({ url });
+    try {
+      await chrome.notifications.clear(notificationId);
+    } catch {
+      // Already dismissed.
+    }
+  })().catch((error) => console.warn('[market-scraper] notification click failed:', error));
+});
+
+/* ------------------------------------------------------------------ *
+ * External bus — the dashboard, when it is served as a real website
+ * ------------------------------------------------------------------ */
+
+const externalAllowed = new Set(EXTERNAL_ALLOWED);
+
+/**
+ * Resolves one request from a page on an `externally_connectable` origin.
+ *
+ * Chrome has already checked the sender against the manifest's match list by
+ * the time this runs, so the job here is narrowing *what* such a page may ask
+ * for. Anything outside `EXTERNAL_ALLOWED` is refused by name rather than
+ * silently dropped, because a dashboard calling a message the extension will
+ * never answer is a bug worth seeing.
+ *
+ * Exported so the test suite can drive the boundary directly.
+ */
+export async function handleExternalRequest(message) {
+  if (!message || typeof message.type !== 'string') {
+    throw new Error('Malformed request.');
+  }
+  if (!externalAllowed.has(message.type)) {
+    throw new Error(`"${message.type}" is not available to the dashboard.`);
+  }
+  return handleRequest(message);
+}
+
+chrome.runtime.onMessageExternal.addListener((message, _sender, sendResponse) => {
+  handleExternalRequest(message)
     .then((data) => sendResponse({ ok: true, data }))
     .catch((error) => sendResponse({ ok: false, error: String((error && error.message) || error) }));
   return true; // response is asynchronous

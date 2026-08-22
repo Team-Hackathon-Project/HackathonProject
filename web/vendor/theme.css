@@ -1,0 +1,388 @@
+/*
+ * Shared design system for the extension's two surfaces (popup, options).
+ *
+ * Two rules hold this together:
+ *
+ *  1. Colour is information, not decoration. The interface is a neutral
+ *     graphite ramp; hue is spent only where it carries meaning - a price that
+ *     moved, a verdict, an agent repair, a warning. The primary button is
+ *     monochrome on purpose: it is the loudest thing on screen without
+ *     borrowing a single degree of hue.
+ *  2. Hierarchy comes from type and space. Size, weight, tracking and a 4px
+ *     rhythm do the work that borders and fills normally do.
+ *
+ * Everything here is self-contained: no webfonts, no external assets, nothing
+ * that would need a CSP exception or a network round trip.
+ */
+
+:root {
+  color-scheme: dark;
+
+  /* Surfaces, from the page floor upward. */
+  --canvas: #0a0c0e;
+  --panel: #101317;
+  --panel-2: #161b20;
+  --inset: #0c0f12;
+  --hair: rgba(255, 255, 255, 0.075);
+  --hair-2: rgba(255, 255, 255, 0.14);
+
+  /* Ink, from primary reading weight down to captions. */
+  --ink: #eef1f3;
+  --ink-2: #99a4ad;
+  --ink-3: #808b94;
+
+  /* The monochrome primary action. */
+  --solid: #f3f5f6;
+  --solid-ink: #0a0c0e;
+
+  /* The only hues in the system. Desaturated so they read as data, not paint. */
+  --up: #5cc08c;
+  --down: #e2807a;
+  --hold: #d2a765;
+  --agent: #62c8c1;
+  --warn: #d8a45a;
+
+  --focus: rgba(255, 255, 255, 0.82);
+
+  --r-1: 6px;
+  --r-2: 10px;
+  --r-3: 14px;
+
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-2: 0 18px 40px -12px rgba(0, 0, 0, 0.7), 0 2px 8px rgba(0, 0, 0, 0.4);
+
+  --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+  --fast: 120ms;
+  --base: 220ms;
+  --slow: 520ms;
+
+  --font: "Segoe UI Variable Text", -apple-system, BlinkMacSystemFont, "SF Pro Text",
+    "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-display: "Segoe UI Variable Display", -apple-system, BlinkMacSystemFont,
+    "SF Pro Display", "Segoe UI", Roboto, sans-serif;
+  --font-mono: ui-monospace, "Cascadia Mono", SFMono-Regular, Menlo, Consolas, monospace;
+
+  --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E");
+  --grain-opacity: 0.035;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    color-scheme: light;
+    --canvas: #f6f7f9;
+    --panel: #ffffff;
+    --panel-2: #f3f5f7;
+    --inset: #eceff2;
+    --hair: rgba(10, 16, 22, 0.09);
+    --hair-2: rgba(10, 16, 22, 0.18);
+    --ink: #0f151a;
+    --ink-2: #5a666f;
+    --ink-3: #646f77;
+    --solid: #12181d;
+    --solid-ink: #ffffff;
+    --up: #17835a;
+    --down: #bf4339;
+    --hold: #8f6b1c;
+    --agent: #0d8a82;
+    --warn: #97701d;
+    --focus: rgba(10, 16, 22, 0.6);
+    --shadow-1: 0 1px 2px rgba(10, 16, 22, 0.07);
+    --shadow-2: 0 20px 44px -16px rgba(10, 16, 22, 0.28), 0 2px 6px rgba(10, 16, 22, 0.08);
+    --grain-opacity: 0.05;
+  }
+}
+
+*,
+*::before,
+*::after { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--canvas);
+  color: var(--ink);
+  font-family: var(--font);
+  font-size: 13px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  font-variant-numeric: tabular-nums;
+}
+
+/* A single film of noise over the whole surface. Barely perceptible on its
+   own; what it does is stop large flat panels from looking like plastic. */
+.grain {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 100;
+  background-image: var(--grain);
+  opacity: var(--grain-opacity);
+  mix-blend-mode: overlay;
+}
+
+/* ---------------------------------------------------------------- *
+ * Type
+ * ---------------------------------------------------------------- */
+
+h1, h2, h3 { font-family: var(--font-display); margin: 0; }
+
+/* The section label: the quietest possible way to name a region. */
+.label,
+h2.label {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--ink-3);
+}
+
+.muted { color: var(--ink-2); }
+.small { font-size: 11px; }
+.mono { font-family: var(--font-mono); font-size: 11px; letter-spacing: -0.01em; }
+
+.disclaimer {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--ink-3);
+}
+
+.hidden { display: none !important; }
+
+/* ---------------------------------------------------------------- *
+ * Focus - monochrome, and only for keyboard users.
+ * ---------------------------------------------------------------- */
+
+:focus { outline: none; }
+
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+  border-radius: var(--r-1);
+}
+
+/* ---------------------------------------------------------------- *
+ * Buttons
+ * ---------------------------------------------------------------- */
+
+button {
+  font-family: inherit;
+  font-size: 13px;
+  color: inherit;
+  cursor: pointer;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 9px 14px;
+  border-radius: var(--r-2);
+  border: 1px solid var(--hair);
+  background: var(--panel-2);
+  color: var(--ink);
+  font-weight: 550;
+  letter-spacing: -0.005em;
+  transition: background var(--fast) var(--ease), border-color var(--fast) var(--ease),
+    color var(--fast) var(--ease), transform var(--fast) var(--ease), opacity var(--fast) var(--ease);
+}
+
+.btn:hover { border-color: var(--hair-2); background: var(--panel); }
+.btn:active { transform: scale(0.985); }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+.btn .i { flex: none; width: 15px; height: 15px; }
+
+/* The one solid element on the page. No hue, maximum contrast. */
+.btn.primary {
+  background: var(--solid);
+  color: var(--solid-ink);
+  border-color: transparent;
+  font-weight: 600;
+}
+.btn.primary:hover { background: var(--solid); filter: brightness(0.93); border-color: transparent; }
+.btn.primary:disabled { filter: none; }
+
+.btn.ghost { background: transparent; }
+.btn.ghost:hover { background: var(--panel-2); }
+
+.btn.block { width: 100%; }
+.btn.small { padding: 7px 11px; font-size: 12px; }
+
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  flex: none;
+  border-radius: var(--r-2);
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--ink-3);
+  transition: color var(--fast) var(--ease), background var(--fast) var(--ease),
+    border-color var(--fast) var(--ease);
+}
+.icon-btn svg { width: 16px; height: 16px; transition: transform var(--slow) var(--ease); }
+.icon-btn:hover { color: var(--ink); background: var(--panel-2); border-color: var(--hair); }
+.icon-btn:hover svg { transform: rotate(40deg); }
+
+/* ---------------------------------------------------------------- *
+ * Fields
+ * ---------------------------------------------------------------- */
+
+input[type="text"],
+input[type="password"],
+input[type="number"],
+select {
+  background: var(--inset);
+  border: 1px solid var(--hair);
+  color: var(--ink);
+  border-radius: var(--r-1);
+  padding: 8px 10px;
+  font: inherit;
+  font-size: 12.5px;
+  transition: border-color var(--fast) var(--ease), background var(--fast) var(--ease);
+}
+
+input::placeholder { color: var(--ink-3); }
+
+input[type="text"]:hover,
+input[type="password"]:hover,
+input[type="number"]:hover,
+select:hover { border-color: var(--hair-2); }
+
+input[type="text"]:focus-visible,
+input[type="password"]:focus-visible,
+input[type="number"]:focus-visible,
+select:focus-visible { outline-offset: 0; border-color: transparent; }
+
+select {
+  appearance: none;
+  padding-right: 30px;
+  background-image: linear-gradient(45deg, transparent 50%, var(--ink-2) 50%),
+    linear-gradient(135deg, var(--ink-2) 50%, transparent 50%);
+  background-position: calc(100% - 15px) calc(50% + 1px), calc(100% - 10px) calc(50% + 1px);
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+}
+
+input[type="checkbox"] {
+  appearance: none;
+  width: 15px;
+  height: 15px;
+  flex: none;
+  margin: 0;
+  border: 1px solid var(--hair-2);
+  border-radius: 4px;
+  background: var(--inset);
+  display: inline-grid;
+  place-content: center;
+  cursor: pointer;
+  transition: background var(--fast) var(--ease), border-color var(--fast) var(--ease);
+}
+input[type="checkbox"]::after {
+  content: "";
+  width: 8px;
+  height: 5px;
+  border: 1.6px solid var(--solid-ink);
+  border-top: 0;
+  border-right: 0;
+  transform: rotate(-45deg) translate(0.5px, -1px) scale(0.6);
+  opacity: 0;
+  transition: opacity var(--fast) var(--ease), transform var(--fast) var(--ease);
+}
+input[type="checkbox"]:checked { background: var(--solid); border-color: var(--solid); }
+input[type="checkbox"]:checked::after { opacity: 1; transform: rotate(-45deg) translate(0.5px, -1px) scale(1); }
+
+/* ---------------------------------------------------------------- *
+ * Cards and status text
+ * ---------------------------------------------------------------- */
+
+.card {
+  background: var(--panel);
+  border: 1px solid var(--hair);
+  border-radius: var(--r-3);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  box-shadow: var(--shadow-1);
+}
+
+.status {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--ink-2);
+}
+.status.error { color: var(--down); }
+
+details > summary {
+  cursor: pointer;
+  list-style: none;
+  font-size: 11px;
+  color: var(--ink-3);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 0;
+  transition: color var(--fast) var(--ease);
+}
+details > summary::-webkit-details-marker { display: none; }
+details > summary::before {
+  content: "";
+  width: 4px;
+  height: 4px;
+  flex: none;
+  border-right: 1.4px solid currentColor;
+  border-bottom: 1.4px solid currentColor;
+  transform: rotate(-45deg);
+  transition: transform var(--base) var(--ease);
+}
+details[open] > summary::before { transform: rotate(45deg); }
+details > summary:hover { color: var(--ink); }
+
+/* ---------------------------------------------------------------- *
+ * Motion
+ * ---------------------------------------------------------------- */
+
+@keyframes rise {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes sweep {
+  0% { transform: translateX(-60%) scaleX(0.35); }
+  50% { transform: translateX(60%) scaleX(1); }
+  100% { transform: translateX(180%) scaleX(0.35); }
+}
+
+@keyframes pulse-ring {
+  0% { opacity: 0.7; transform: scale(0.6); }
+  70% { opacity: 0; transform: scale(1.9); }
+  100% { opacity: 0; transform: scale(1.9); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+  }
+}
+
+/* ---------------------------------------------------------------- *
+ * Scrollbar
+ * ---------------------------------------------------------------- */
+
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: var(--hair-2);
+  border-radius: 99px;
+  border: 3px solid var(--canvas);
+}
+::-webkit-scrollbar-thumb:hover { background: var(--ink-3); }

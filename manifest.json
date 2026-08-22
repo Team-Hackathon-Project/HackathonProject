@@ -8,12 +8,24 @@
     "activeTab",
     "storage",
     "scripting",
-    "offscreen"
+    "offscreen",
+    "alarms",
+    "notifications"
   ],
   "host_permissions": [
     "https://api.anthropic.com/*",
     "https://api.groq.com/*"
   ],
+  "optional_host_permissions": [
+    "http://*/*",
+    "https://*/*"
+  ],
+  "externally_connectable": {
+    "matches": [
+      "http://localhost/*",
+      "http://127.0.0.1/*"
+    ]
+  },
   "background": {
     "service_worker": "src/background.js",
     "type": "module"

@@ -8,13 +8,16 @@
     "test": "node --test",
     "lint": "node scripts/validate.mjs",
     "icons": "node scripts/make-icons.mjs",
+    "web:sync": "node scripts/web-sync.mjs",
+    "web": "node scripts/serve-web.mjs",
     "check": "npm run lint && npm test",
-    "package": "node scripts/package.mjs",
+    "package": "npm run web:sync && node scripts/package.mjs",
     "e2e": "node e2e/quote-page.mjs",
     "e2e:heal": "node e2e/self-healing.mjs",
     "e2e:provider": "node e2e/provider-check.mjs",
     "e2e:live": "node e2e/live-quote.mjs",
-    "e2e:targets": "node e2e/auto-targets.mjs"
+    "e2e:targets": "node e2e/auto-targets.mjs",
+    "e2e:dashboard": "node e2e/dashboard.mjs"
   },
   "devDependencies": {
     "jsdom": "^30.0.1",

@@ -77,7 +77,41 @@ not accept garbage — and the bad selector never reaches the registry.
 Scan again and the healed selector is reused from `chrome.storage.local` with no
 second model call.
 
-## 4. Where the state lives (~20s)
+## 4. Everything at once, and it tells you when something moves (~50s)
+
+Open the options page and press **Open dashboard**. This is the same watchlist
+the popup has been feeding, on one page.
+
+Say, while it is on screen:
+
+- **Every ticker you have scanned is here already.** Nothing was configured; the
+  watchlist builds itself out of what you scan.
+- **The sparkline only appears at four scans or more.** A line drawn through two
+  points is a confident trend invented out of a single move, so it is not drawn
+  at all — the card says how many more scans it needs instead.
+- **The bar under it is your own buy/sell band**, with today's price marked on
+  it: the targets from the options page, or the ones the suggester proposed.
+
+Then click a card and point at **Alert me when it...**. Add a **Percent move**
+of 5%. What to say about it:
+
+- It fires on the *crossing*, not while the condition holds. A price that stays
+  above your target is one event, not one every fifteen minutes.
+- With **Check prices in the background** switched on, the extension re-reads
+  each ticker on a timer and alerts you with this page closed: an OS
+  notification, a count on the toolbar icon, and the feed here. Three channels,
+  because the operating system can suppress the first one without telling
+  anybody.
+- Background refresh needs access to that one site. It is asked for at the
+  moment it is needed and revoked in **Site access**; nothing is granted at
+  install.
+
+The same page also runs as a real website — `npm run web`, then
+`http://localhost:8080`. Identical files; only the transport differs. Worth
+saying plainly: nothing is stored in the website. It is a view onto the
+extension, which is where the data and the API key stay.
+
+## 5. Where the state lives (~20s)
 
 ![Options: key, model, targets, healed registry](demo/05-options.png)
 

@@ -1,0 +1,564 @@
+/*
+ * Dashboard layout, on top of the extension's design system.
+ *
+ * `vendor/theme.css` already supplies the palette, the type scale, buttons,
+ * fields and cards. Nothing is redefined here — this file only does the two
+ * things the popup never had to: lay a grid of instruments out across a full
+ * window, and draw the price shapes.
+ *
+ * The rule the palette follows holds here too: hue is information. Green and
+ * red appear on a price that moved and on a target that was crossed, and
+ * nowhere else. The chrome stays graphite.
+ */
+
+.app {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 26px 22px 60px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+/* ---------------------------------------------------------------- *
+ * Header
+ * ---------------------------------------------------------------- */
+
+.top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.top h1 {
+  font-size: 20px;
+  font-weight: 620;
+  letter-spacing: -0.02em;
+}
+
+.top-title p { margin: 3px 0 0; }
+.top-actions { display: flex; align-items: center; gap: 8px; }
+
+/* ---------------------------------------------------------------- *
+ * Summary strip
+ * ---------------------------------------------------------------- */
+
+.summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1px;
+  background: var(--hair);
+  border: 1px solid var(--hair);
+  border-radius: var(--r-3);
+  overflow: hidden;
+}
+
+.stat {
+  flex: 1 1 130px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 12px 14px;
+  background: var(--panel);
+}
+
+.stat-label {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--ink-3);
+}
+
+.stat-value {
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.stat[data-tone="up"] .stat-value { color: var(--up); }
+.stat[data-tone="down"] .stat-value { color: var(--down); }
+.stat[data-tone="warn"] .stat-value { color: var(--warn); }
+
+/* ---------------------------------------------------------------- *
+ * Banners
+ * ---------------------------------------------------------------- */
+
+.banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding: 12px 14px;
+  border-radius: var(--r-2);
+  border: 1px solid var(--hair-2);
+  background: var(--panel-2);
+  animation: rise var(--base) var(--ease) both;
+}
+
+.banner-body p { margin: 2px 0 0; font-size: 12px; color: var(--ink-2); }
+.banner-body strong { font-size: 12.5px; }
+.banner-actions { display: flex; gap: 8px; }
+
+.banner-warn { border-left: 3px solid var(--warn); }
+.banner-error { border-left: 3px solid var(--down); }
+
+/* ---------------------------------------------------------------- *
+ * Connect panel and the add form
+ * ---------------------------------------------------------------- */
+
+.connect { gap: 8px; max-width: 520px; }
+.connect .row { display: flex; gap: 8px; margin-top: 4px; }
+
+.wide { width: 100%; }
+
+input[type="url"] {
+  background: var(--inset);
+  border: 1px solid var(--hair);
+  color: var(--ink);
+  border-radius: var(--r-1);
+  padding: 8px 10px;
+  font: inherit;
+  font-size: 12.5px;
+  transition: border-color var(--fast) var(--ease);
+}
+input[type="url"]:hover { border-color: var(--hair-2); }
+input[type="url"]:focus-visible { outline-offset: 0; border-color: transparent; }
+
+.add-form {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.add-form input[type="text"] { width: 110px; text-transform: uppercase; }
+.add-form input[type="url"] { flex: 1 1 240px; min-width: 0; }
+
+/* ---------------------------------------------------------------- *
+ * Watchlist grid
+ * ---------------------------------------------------------------- */
+
+.watchlist { display: flex; flex-direction: column; gap: 10px; }
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(268px, 1fr));
+  gap: 12px;
+}
+
+.watch-card {
+  gap: 12px;
+  cursor: pointer;
+  transition: border-color var(--fast) var(--ease), box-shadow var(--base) var(--ease),
+    transform var(--fast) var(--ease);
+}
+.watch-card:hover { border-color: var(--hair-2); box-shadow: var(--shadow-2); }
+.watch-card:active { transform: scale(0.995); }
+.watch-card[data-busy="true"] { opacity: 0.55; pointer-events: none; }
+
+.watch-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.watch-id { display: flex; align-items: center; gap: 7px; }
+
+.watch-ticker {
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 640;
+  letter-spacing: -0.01em;
+}
+
+.row.center { justify-content: center; }
+
+.chip {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  padding: 2px 6px;
+  border-radius: 99px;
+  background: var(--inset);
+  border: 1px solid var(--hair);
+  color: var(--ink-3);
+}
+
+.chip-warn { color: var(--warn); border-color: var(--warn); background: transparent; }
+
+.watch-move { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
+
+.watch-price {
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.watch-change { font-size: 11.5px; font-weight: 600; }
+.watch-change.up { color: var(--up); }
+.watch-change.down { color: var(--down); }
+.watch-change.flat { color: var(--ink-3); font-weight: 500; }
+
+/* Pushes the footer to the bottom of whichever card is tallest in the row, so
+   the status lines and toggles line up across the grid instead of floating at
+   whatever height each card's content happens to end. */
+.watch-foot {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding-top: 2px;
+  border-top: 1px solid var(--hair);
+}
+
+/* WCAG 2.2 AA asks for 24x24 CSS px pointer targets and adjacent targets need
+   room between them, so the toggle gets a real height rather than inheriting
+   the 15px checkbox, and the gap is 8px rather than a hair. */
+.watch-actions { display: flex; align-items: center; gap: 8px; }
+
+.monitor {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 24px;
+  padding: 0 2px;
+  cursor: pointer;
+}
+
+/* The remove button reuses .icon-btn but carries a glyph, not an SVG, so the
+   rotate-on-hover the icon buttons use would just look like a mistake. */
+.plain-icon { font-size: 15px; line-height: 1; min-width: 24px; min-height: 24px; }
+.plain-icon:hover { color: var(--ink); }
+.plain-icon.remove:hover { color: var(--down); }
+
+/* Asking for site access, on the card that needs it. */
+.grant {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--warn);
+  border-radius: var(--r-1);
+  background: var(--inset);
+  color: var(--ink-2);
+}
+
+/* ---------------------------------------------------------------- *
+ * Sparkline
+ * ---------------------------------------------------------------- */
+
+.watch-chart { display: flex; flex-direction: column; gap: 2px; }
+
+/* The chart states its trend in colour; this states it in words. */
+.watch-range {
+  color: var(--ink-2);
+  font-family: var(--font-mono);
+  letter-spacing: -0.01em;
+}
+.watch-chart-empty {
+  display: grid;
+  place-content: center;
+  height: 44px;
+  border: 1px dashed var(--hair);
+  border-radius: var(--r-1);
+}
+
+.spark { display: block; width: 100%; height: 44px; overflow: visible; }
+
+.spark-line {
+  fill: none;
+  stroke: var(--ink-3);
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+}
+.spark-fill { fill: var(--ink-3); opacity: 0.08; }
+.spark-head { fill: var(--ink-3); }
+
+.spark[data-direction="up"] .spark-line,
+.spark[data-direction="up"] .spark-head { stroke: var(--up); fill: var(--up); }
+.spark[data-direction="up"] .spark-line { fill: none; }
+.spark[data-direction="up"] .spark-fill { fill: var(--up); }
+
+.spark[data-direction="down"] .spark-line,
+.spark[data-direction="down"] .spark-head { stroke: var(--down); fill: var(--down); }
+.spark[data-direction="down"] .spark-line { fill: none; }
+.spark[data-direction="down"] .spark-fill { fill: var(--down); }
+
+/* ---------------------------------------------------------------- *
+ * Target band
+ * ---------------------------------------------------------------- */
+
+.target { display: flex; flex-direction: column; gap: 5px; }
+
+.target-track {
+  position: relative;
+  height: 4px;
+  border-radius: 99px;
+  background: linear-gradient(90deg, var(--up), var(--hair-2) 45%, var(--hair-2) 55%, var(--down));
+  opacity: 0.65;
+}
+
+.target-marker {
+  position: absolute;
+  top: 50%;
+  width: 3px;
+  height: 12px;
+  border-radius: 2px;
+  background: var(--ink);
+  transform: translate(-50%, -50%);
+  box-shadow: 0 0 0 2px var(--panel);
+}
+
+.target-legend {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--ink-2);
+  font-family: var(--font-mono);
+}
+
+.target-zone { font-weight: 700; letter-spacing: 0.06em; }
+.target[data-zone="buy"] .target-zone { color: var(--up); }
+.target[data-zone="sell"] .target-zone { color: var(--down); }
+.target[data-zone="hold"] .target-zone { color: var(--hold); }
+
+/* ---------------------------------------------------------------- *
+ * Empty state
+ * ---------------------------------------------------------------- */
+
+.empty {
+  padding: 46px 22px;
+  text-align: center;
+  border: 1px dashed var(--hair-2);
+  border-radius: var(--r-3);
+}
+.empty h2 { font-size: 15px; font-weight: 600; margin-bottom: 6px; }
+.empty p { margin: 4px auto; max-width: 46ch; font-size: 12.5px; }
+
+/* ---------------------------------------------------------------- *
+ * Detail drawer
+ * ---------------------------------------------------------------- */
+
+.drawer {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: flex-end;
+  animation: fade var(--fast) var(--ease) both;
+}
+
+@keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes slide-in { from { transform: translateX(18px); opacity: 0; } to { transform: none; opacity: 1; } }
+
+.drawer-panel {
+  width: min(430px, 100%);
+  height: 100%;
+  overflow-y: auto;
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  background: var(--panel);
+  border-left: 1px solid var(--hair-2);
+  box-shadow: var(--shadow-2);
+  animation: slide-in var(--base) var(--ease) both;
+}
+
+.drawer-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.drawer-head h2 { font-size: 17px; font-weight: 640; letter-spacing: -0.02em; }
+
+.drawer-section { display: flex; flex-direction: column; gap: 6px; }
+.drawer-section h3 {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--ink-3);
+}
+
+.facts {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 5px 14px;
+  margin: 0;
+  font-size: 12.5px;
+}
+.facts dt { color: var(--ink-3); }
+.facts dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
+
+.plain { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 5px; }
+.plain li { line-height: 1.45; }
+.scroll { max-height: 190px; overflow-y: auto; }
+
+.link { color: var(--ink); text-underline-offset: 2px; }
+.link:hover { color: var(--agent); }
+
+.verdict {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--inset);
+  border: 1px solid var(--hair);
+}
+.verdict[data-verdict="APPROVED"] { color: var(--up); }
+.verdict[data-verdict="REJECTED"] { color: var(--down); }
+.verdict[data-verdict="OVERRIDDEN"] { color: var(--hold); }
+
+/* ---------------------------------------------------------------- *
+ * Footer
+ * ---------------------------------------------------------------- */
+
+.foot {
+  padding-top: 14px;
+  border-top: 1px solid var(--hair);
+  text-align: center;
+}
+
+/* ---------------------------------------------------------------- *
+ * Narrow windows
+ * ---------------------------------------------------------------- */
+
+@media (max-width: 560px) {
+  .app { padding: 18px 14px 40px; }
+  .grid { grid-template-columns: 1fr; }
+  .drawer-panel { width: 100%; border-left: 0; }
+}
+
+/* ---------------------------------------------------------------- *
+ * Monitoring
+ * ---------------------------------------------------------------- */
+
+.monitor-card { gap: 8px; }
+
+.monitor-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.monitor-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 24px;
+  cursor: pointer;
+  font-weight: 550;
+}
+
+/* ---------------------------------------------------------------- *
+ * Alert feed
+ * ---------------------------------------------------------------- */
+
+.feed { display: flex; flex-direction: column; gap: 8px; }
+
+.feed-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.feed-list {
+  gap: 1px;
+  background: var(--hair);
+  border: 1px solid var(--hair);
+  border-radius: var(--r-2);
+  overflow: hidden;
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+.alert-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  background: var(--panel);
+  cursor: pointer;
+  border-left: 3px solid transparent;
+  transition: background var(--fast) var(--ease);
+}
+.alert-row:hover { background: var(--panel-2); }
+
+/* An unread alert is the only thing in the list carrying weight; once read it
+   drops back to being history, which is what the muted state says. */
+.alert-row[data-seen="false"] { border-left-color: var(--ink-3); }
+.alert-row[data-seen="false"][data-direction="up"] { border-left-color: var(--up); }
+.alert-row[data-seen="false"][data-direction="down"] { border-left-color: var(--down); }
+.alert-row[data-seen="true"] { opacity: 0.62; }
+
+.alert-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.alert-title { font-size: 12.5px; }
+.alert-when { flex: none; white-space: nowrap; }
+
+/* ---------------------------------------------------------------- *
+ * Rules
+ * ---------------------------------------------------------------- */
+
+.rule-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 5px 0;
+  border-bottom: 1px solid var(--hair);
+}
+
+.rule-form { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 8px; }
+.rule-fields { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.rule-form input[type="number"] { width: 88px; }
+.rule-form select { max-width: 100%; }
+
+/* ---------------------------------------------------------------- *
+ * Toasts
+ * ---------------------------------------------------------------- */
+
+.toasts {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  pointer-events: none;
+}
+
+.toast {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 240px;
+  max-width: 340px;
+  padding: 11px 13px;
+  border-radius: var(--r-2);
+  border: 1px solid var(--hair-2);
+  border-left: 3px solid var(--ink-3);
+  background: var(--panel);
+  box-shadow: var(--shadow-2);
+  animation: rise var(--base) var(--ease) both;
+}
+
+.toast[data-direction="up"] { border-left-color: var(--up); }
+.toast[data-direction="down"] { border-left-color: var(--down); }

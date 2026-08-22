@@ -31,7 +31,13 @@
           </div>
 
           <nav class="nav" aria-label="Sections">
-            <a href="#agent" class="nav-link is-active">
+            <a href="#dashboard" class="nav-link is-active">
+              <span class="nav-dot" aria-hidden="true"></span>Dashboard
+            </a>
+            <a href="#access" class="nav-link">
+              <span class="nav-dot" aria-hidden="true"></span>Site access
+            </a>
+            <a href="#agent" class="nav-link">
               <span class="nav-dot" aria-hidden="true"></span>Agent
             </a>
             <a href="#targets" class="nav-link">
@@ -57,6 +63,58 @@
           <h1>Market Advisory Engine</h1>
           <p class="sub">Settings, portfolio targets, and the self-healing selector registry.</p>
         </header>
+
+        <section id="dashboard" class="card">
+          <header class="card-head">
+            <div>
+              <h2>Dashboard</h2>
+              <p class="card-sub">Every ticker you are watching, on one page.</p>
+            </div>
+          </header>
+
+          <div class="fields">
+            <p class="hint">
+              The copy inside the extension needs no server and no setup. Open it whenever you want the
+              whole watchlist rather than the one tab you are looking at.
+            </p>
+            <div class="row">
+              <button id="open-dashboard" class="btn primary small" type="button">Open dashboard</button>
+            </div>
+
+            <div class="field">
+              <label for="dashboard-origin">Served elsewhere</label>
+              <input id="dashboard-origin" type="text" spellcheck="false" placeholder="http://localhost:8080">
+              <p class="hint">
+                Optional. If you are running the dashboard as a website (<code>npm run web</code>), put its
+                address here and the button above will open that copy with this extension's ID already
+                filled in. Only <code>localhost</code> and <code>127.0.0.1</code> can reach the extension —
+                that list lives in <code>manifest.json</code> and cannot be changed from this page.
+              </p>
+            </div>
+            <p id="dashboard-status" class="status" role="status" aria-live="polite"></p>
+          </div>
+        </section>
+
+        <section id="access" class="card">
+          <header class="card-head">
+            <div>
+              <h2>Site access</h2>
+              <p class="card-sub">Which quote pages the extension may re-read on its own.</p>
+            </div>
+          </header>
+
+          <div class="fields">
+            <p class="hint">
+              Scanning a tab you are looking at needs no permission at all &mdash; that is what clicking the
+              toolbar icon grants. Refreshing a ticker in the background is different: the page is not open,
+              so the extension needs standing access to that one site. Nothing is granted at install, each
+              host is asked for separately, and you can take any of them back here or from
+              <code>chrome://extensions</code>.
+            </p>
+            <div id="access-list" class="rows"></div>
+            <p id="access-status" class="status" role="status" aria-live="polite"></p>
+          </div>
+        </section>
 
         <section id="agent" class="card">
           <header class="card-head">

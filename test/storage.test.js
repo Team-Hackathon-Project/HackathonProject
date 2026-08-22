@@ -87,7 +87,8 @@ test('storage access without a chrome runtime fails loudly', async () => {
 
 test('the storage keys match the documented schema names', () => {
   assert.deepEqual(Object.values(STORAGE_KEYS).sort(), [
-    'decisions', 'heal_log', 'portfolio', 'price_history', 'selector_registry', 'settings', 'snapshots',
+    'alert_rules', 'alerts', 'decisions', 'heal_log', 'portfolio', 'price_history',
+    'selector_registry', 'settings', 'snapshots', 'watchlist',
   ]);
 });
 

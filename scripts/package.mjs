@@ -21,7 +21,13 @@ import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
 const ROOT = fileURLToPath(new URL('../', import.meta.url));
-const INCLUDE = ['manifest.json', 'src'];
+
+/**
+ * `web/` ships inside the bundle so the dashboard has a route that needs no
+ * server and no extension id: chrome-extension://<id>/web/index.html. The same
+ * folder is separately deployable as a static site.
+ */
+const INCLUDE = ['manifest.json', 'src', 'web'];
 
 /** Every file under `relative`, depth-first, as repo-relative posix paths. */
 function collect(relative) {
