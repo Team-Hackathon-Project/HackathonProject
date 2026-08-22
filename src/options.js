@@ -54,14 +54,24 @@ function renderAgentState() {
   const node = el('agent-state');
   node.replaceChildren();
 
-  const line = document.createElement('span');
-  line.textContent = `${provider.label} · ${el('model').value.trim() || provider.defaultModel}`;
+  // A status dot, what is answering, and whether it can. The long version -
+  // which repairs and advisories this does and does not buy you - is the
+  // tooltip: it is context, not the headline.
+  const dot = document.createElement('span');
+  dot.className = `dot ${hasKey ? 'on' : 'off'}`;
+
+  const which = document.createElement('span');
+  which.className = 'agent-model';
+  which.textContent = `${provider.label} · ${el('model').value.trim() || provider.defaultModel}`;
+
   const state = document.createElement('span');
   state.className = hasKey ? 'on' : 'off';
-  state.textContent = hasKey
-    ? 'Key set — repairs and model advisories are available.'
+  state.textContent = hasKey ? 'Key set' : 'No key';
+
+  node.title = hasKey
+    ? 'Key set — selector repairs and model advisories are available.'
     : 'No key — running on the built-in rules only.';
-  node.append(line, document.createElement('br'), state);
+  node.append(dot, which, state);
 }
 
 /**
@@ -173,43 +183,112 @@ async function renderPortfolio() {
   }
 }
 
+/**
+ * One record in the registry or the repair log.
+ *
+ * Both were single monospace lines holding four facts each, which reads as a
+ * log file rather than as something you are meant to act on. They are records,
+ * so they are set as records: what changed in reading weight, the detail
+ * beneath it, the outcome as a chip on the right.
+ */
+function entryRow({ title, field, detail, when, status }) {
+  const item = document.createElement('li');
+  item.className = 'entry';
+
+  const main = document.createElement('div');
+  main.className = 'entry-main';
+
+  const heading = document.createElement('span');
+  heading.className = 'entry-title';
+  heading.textContent = `${title} · `;
+  const fieldName = document.createElement('span');
+  fieldName.className = 'field-name';
+  fieldName.textContent = field;
+  heading.appendChild(fieldName);
+  main.appendChild(heading);
+
+  if (detail) {
+    const line = document.createElement('span');
+    line.className = 'entry-detail';
+    line.textContent = detail;
+    main.appendChild(line);
+  }
+
+  const meta = document.createElement('div');
+  meta.className = 'entry-meta';
+  if (when) {
+    const stamp = document.createElement('span');
+    stamp.textContent = when;
+    meta.appendChild(stamp);
+  }
+  if (status) {
+    const pill = document.createElement('span');
+    pill.className = `pill ${status.tone}`;
+    pill.textContent = status.text;
+    meta.appendChild(pill);
+  }
+
+  item.append(main, meta);
+  return item;
+}
+
+/** Replaces a list's contents with a centred "nothing here yet" note. */
+function renderEmpty(list, text) {
+  const item = document.createElement('li');
+  item.className = 'empty-note';
+  item.textContent = text;
+  list.replaceChildren(item);
+}
+
+/** A timestamp short enough to sit at the end of a row. */
+function shortTime(iso) {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleString(undefined, {
+    month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
+  });
+}
+
 async function renderRegistry() {
   const registry = await getRegistry();
   const list = el('registry-list');
-  list.replaceChildren();
   const rows = [];
   for (const [host, fields] of Object.entries(registry)) {
     for (const [field, entry] of Object.entries(fields)) {
-      rows.push(`${host} · ${field} → ${entry.selector} (${entry.strategy}, healed ${new Date(entry.healed_at).toLocaleString()})`);
+      rows.push(entryRow({
+        title: host,
+        field,
+        detail: entry.selector,
+        when: shortTime(entry.healed_at),
+        status: { tone: 'ok', text: entry.strategy || 'css' },
+      }));
     }
   }
-  if (!rows.length) rows.push('No healed selectors yet — the shipped defaults are handling every page so far.');
-  for (const text of rows) {
-    const item = document.createElement('li');
-    item.textContent = text;
-    list.appendChild(item);
+  if (!rows.length) {
+    renderEmpty(list, 'No healed selectors yet — the shipped defaults are handling every page so far.');
+    return;
   }
+  list.replaceChildren(...rows);
 }
 
 async function renderHealLog() {
   const log = await getHealLog();
   const list = el('heal-log');
-  list.replaceChildren();
   const entries = log.slice(0, 25);
   if (!entries.length) {
-    const item = document.createElement('li');
-    item.textContent = 'No repair attempts recorded.';
-    list.appendChild(item);
+    renderEmpty(list, 'No repair attempts recorded.');
     return;
   }
-  for (const entry of entries) {
-    const item = document.createElement('li');
-    const when = new Date(entry.at).toLocaleString();
-    item.textContent = entry.healed
-      ? `${when} · ${entry.host} · ${entry.field} → ${entry.proposed} (confidence ${entry.confidence})`
-      : `${when} · ${entry.host} · ${entry.field} · FAILED: ${entry.error}`;
-    list.appendChild(item);
-  }
+  list.replaceChildren(...entries.map((entry) => entryRow({
+    title: entry.host,
+    field: entry.field,
+    // A failure explains itself; a success shows the selector it adopted.
+    detail: entry.healed ? entry.proposed : (entry.error || entry.reason || ''),
+    when: shortTime(entry.at),
+    status: entry.healed
+      ? { tone: 'ok', text: `healed ${Math.round((entry.confidence || 0) * 100)}%` }
+      : { tone: 'bad', text: 'failed' },
+  })));
 }
 
 let shownProvider = null;
@@ -475,41 +554,68 @@ el('reset-registry').addEventListener('click', async () => {
 });
 
 /**
- * Keeps the sidebar rail in step with whichever section is being read.
+ * Switches panels from the sidebar.
  *
- * Guarded twice over: the options page is also driven headlessly in jsdom,
- * which ships neither `IntersectionObserver` nor layout, so this is a no-op
- * there rather than a crash on import.
+ * Replaces the scroll-spy this page used to have. Six sections stacked on one
+ * page meant the rail only ever reported where you already were; now it is the
+ * thing that moves you, and only one section is on screen at a time.
+ *
+ * The hash is kept in step so a panel can be linked to and survives a reload,
+ * and `history.replaceState` is used rather than assigning `location.hash` so
+ * clicking through the rail does not fill the back button with settings panels.
  */
-function trackSections() {
+/**
+ * The hash, read defensively.
+ *
+ * The options page is also driven headlessly, where a document exists but a
+ * `location` global may not. Reaching for the bare global there throws during
+ * init and takes the whole page down with it.
+ */
+function currentHash() {
+  const source = (typeof window !== 'undefined' && window.location)
+    || (typeof location !== 'undefined' ? location : null);
+  return source ? String(source.hash || '').slice(1) : '';
+}
+
+function setupTabs() {
   const links = Array.from(document.querySelectorAll('.nav-link'));
-  if (!links.length || typeof IntersectionObserver !== 'function') return;
+  const panels = Array.from(document.querySelectorAll('.panel'));
+  if (!links.length || !panels.length) return;
 
-  const sections = links
-    .map((link) => document.getElementById((link.getAttribute('href') || '').slice(1)))
-    .filter(Boolean);
-  if (!sections.length) return;
-
-  const onscreen = new Set();
-  const observer = new IntersectionObserver((entries) => {
-    for (const entry of entries) {
-      if (entry.isIntersecting) onscreen.add(entry.target.id);
-      else onscreen.delete(entry.target.id);
-    }
-    // The first section still inside the reading band wins, so scrolling down
-    // hands the highlight on rather than flickering between two neighbours.
-    const active = sections.find((section) => onscreen.has(section.id));
-    if (!active) return;
+  function show(id, { updateHash = true } = {}) {
+    const target = panels.find((panel) => panel.id === id) || panels[0];
+    for (const panel of panels) panel.hidden = panel !== target;
     for (const link of links) {
-      link.classList.toggle('is-active', link.getAttribute('href') === `#${active.id}`);
+      const active = link.getAttribute('href') === `#${target.id}`;
+      link.classList.toggle('is-active', active);
+      if (active) link.setAttribute('aria-current', 'page');
+      else link.removeAttribute('aria-current');
     }
-  }, { rootMargin: '-8% 0px -60% 0px', threshold: 0 });
+    // jsdom has no history implementation worth relying on, and this is
+    // cosmetic either way.
+    if (updateHash && typeof history !== 'undefined' && history.replaceState) {
+      try {
+        history.replaceState(null, '', `#${target.id}`);
+      } catch {
+        // A file:// or sandboxed context can refuse this. Not worth failing over.
+      }
+    }
+    if (typeof window !== 'undefined' && window.scrollTo) window.scrollTo(0, 0);
+  }
 
-  for (const section of sections) observer.observe(section);
+  for (const link of links) {
+    link.addEventListener('click', (event) => {
+      event.preventDefault();
+      show((link.getAttribute('href') || '').slice(1));
+    });
+  }
+
+  const fromHash = currentHash();
+  show(panels.some((panel) => panel.id === fromHash) ? fromHash : panels[0].id, { updateHash: false });
 }
 
 (async function init() {
   await Promise.all([renderSettings(), renderPortfolio(), renderRegistry(), renderHealLog(), renderAccess()]);
   shownProvider = el('provider').value;
-  trackSections();
+  setupTabs();
 })();

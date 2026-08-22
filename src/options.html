@@ -25,188 +25,182 @@
             </span>
           </div>
 
-          <div class="state-readout">
-            <span class="label">Agent status</span>
-            <p id="agent-state">Loading…</p>
-          </div>
-
-          <nav class="nav" aria-label="Sections">
-            <a href="#dashboard" class="nav-link is-active">
-              <span class="nav-dot" aria-hidden="true"></span>Dashboard
-            </a>
-            <a href="#access" class="nav-link">
-              <span class="nav-dot" aria-hidden="true"></span>Site access
-            </a>
-            <a href="#agent" class="nav-link">
-              <span class="nav-dot" aria-hidden="true"></span>Agent
-            </a>
-            <a href="#targets" class="nav-link">
-              <span class="nav-dot" aria-hidden="true"></span>Portfolio targets
-            </a>
-            <a href="#registry" class="nav-link">
-              <span class="nav-dot" aria-hidden="true"></span>Healed selectors
-            </a>
-            <a href="#repairs" class="nav-link">
-              <span class="nav-dot" aria-hidden="true"></span>Repair log
-            </a>
+          <nav class="nav" aria-label="Settings sections">
+            <a href="#dashboard" class="nav-link is-active">Dashboard</a>
+            <a href="#agent" class="nav-link">Agent</a>
+            <a href="#targets" class="nav-link">Portfolio</a>
+            <a href="#access" class="nav-link">Site access</a>
+            <a href="#registry" class="nav-link">Selectors</a>
+            <a href="#repairs" class="nav-link">Repair log</a>
           </nav>
 
           <p class="sidebar-foot">
-            Everything on this page lives in <code>chrome.storage.local</code> on this machine. Nothing is
-            synced, and no order is ever placed.
+            Everything here lives in <code>chrome.storage.local</code> on this machine. Nothing is synced,
+            and no order is ever placed.
           </p>
         </div>
       </aside>
 
       <main>
         <header class="page-head">
-          <h1>Market Advisory Engine</h1>
-          <p class="sub">Settings, portfolio targets, and the self-healing selector registry.</p>
+          <h1>Settings</h1>
+          <p id="agent-state" class="agent-chip">Loading…</p>
         </header>
 
-        <section id="dashboard" class="card">
-          <header class="card-head">
-            <div>
-              <h2>Dashboard</h2>
-              <p class="card-sub">Every ticker you are watching, on one page.</p>
-            </div>
-          </header>
-
-          <div class="fields">
-            <p class="hint">
-              The copy inside the extension needs no server and no setup. Open it whenever you want the
-              whole watchlist rather than the one tab you are looking at.
-            </p>
-            <div class="row">
-              <button id="open-dashboard" class="btn primary small" type="button">Open dashboard</button>
-            </div>
-
-            <div class="field">
-              <label for="dashboard-origin">Served elsewhere</label>
-              <input id="dashboard-origin" type="text" spellcheck="false" placeholder="http://localhost:8080">
-              <p class="hint">
-                Optional. If you are running the dashboard as a website (<code>npm run web</code>), put its
-                address here and the button above will open that copy with this extension's ID already
-                filled in. Only <code>localhost</code> and <code>127.0.0.1</code> can reach the extension —
-                that list lives in <code>manifest.json</code> and cannot be changed from this page.
-              </p>
-            </div>
-            <p id="dashboard-status" class="status" role="status" aria-live="polite"></p>
+        <!-- ---------------------------------------------------------- -->
+        <section id="dashboard" class="panel is-active" aria-labelledby="dashboard-title">
+          <div class="panel-head">
+            <h2 id="dashboard-title">Dashboard</h2>
+            <p class="panel-sub">Every ticker you are watching, on one page.</p>
           </div>
-        </section>
 
-        <section id="access" class="card">
-          <header class="card-head">
-            <div>
-              <h2>Site access</h2>
-              <p class="card-sub">Which quote pages the extension may re-read on its own.</p>
-            </div>
-          </header>
-
-          <div class="fields">
-            <p class="hint">
-              Scanning a tab you are looking at needs no permission at all &mdash; that is what clicking the
-              toolbar icon grants. Refreshing a ticker in the background is different: the page is not open,
-              so the extension needs standing access to that one site. Nothing is granted at install, each
-              host is asked for separately, and you can take any of them back here or from
-              <code>chrome://extensions</code>.
-            </p>
-            <div id="access-list" class="rows"></div>
-            <p id="access-status" class="status" role="status" aria-live="polite"></p>
-          </div>
-        </section>
-
-        <section id="agent" class="card">
-          <header class="card-head">
-            <div>
-              <h2>Agent</h2>
-              <p class="card-sub">Which model answers, and how much of the page it is allowed to see.</p>
-            </div>
-          </header>
-
-          <div class="fields">
-            <div class="field">
-              <label for="provider">Model provider</label>
-              <select id="provider"></select>
-              <p class="hint">Both do the same two jobs — repair a broken selector, write an advisory. Pick whichever key you have.</p>
-            </div>
-
-            <div class="field">
-              <label for="api-key"><span id="key-label">API key</span> <span id="key-length" class="hint-inline"></span></label>
-              <input id="api-key" type="password" autocomplete="off" spellcheck="false" />
-              <p class="hint">
-                No key? <a id="key-link" href="#" target="_blank" rel="noreferrer noopener">Get one here</a> — or leave this
-                empty and the extension keeps working from its built-in rules.
-              </p>
-              <p class="disclaimer">
-                Stored in <code>chrome.storage.local</code> on this machine and sent only to
-                <code id="key-host">the provider</code> from the extension service worker. It is never exposed to
-                the pages you visit. Keys are kept per provider, so switching does not discard the other one.
-                Leave it empty to run fully offline: no self-healing, and advice comes from the local rules engine.
-              </p>
-            </div>
-
-            <div class="field">
-              <label for="model">Model</label>
-              <input id="model" type="text" list="model-list" autocomplete="off" spellcheck="false" />
-              <datalist id="model-list"></datalist>
-              <div class="button-row">
-                <button id="load-models" class="btn ghost small hidden" type="button">Load models from provider</button>
-                <button id="test-provider" class="btn ghost small" type="button">Test connection</button>
+          <div class="settings">
+            <div class="setting">
+              <div class="setting-text">
+                <span class="setting-label">Open the dashboard</span>
+                <p class="hint">The copy inside the extension needs no server and no setup.</p>
               </div>
-              <p class="hint">Test connection sends one tiny request, so you find out the key works here rather than mid-scan.</p>
-              <p id="model-status" class="status" role="status" aria-live="polite"></p>
+              <div class="setting-control">
+                <button id="open-dashboard" class="btn primary small" type="button">Open dashboard</button>
+              </div>
+            </div>
+
+            <div class="setting">
+              <div class="setting-text">
+                <label for="dashboard-origin">Served elsewhere</label>
+                <p class="hint">Optional. Running it as a website (<code>npm run web</code>)? Put its address here.</p>
+              </div>
+              <div class="setting-control">
+                <input id="dashboard-origin" type="text" spellcheck="false" placeholder="http://localhost:8080" />
+              </div>
             </div>
           </div>
 
-          <div class="switches">
-            <label class="switch checkbox">
-              <input id="self-heal" type="checkbox" />
-              <span class="switch-text">
-                <b>Repair broken selectors with the LLM</b>
-                When a page moves its markup, send the surrounding HTML to the model and adopt the selector it
-                returns.
-              </span>
-            </label>
-            <label class="switch checkbox">
-              <input id="llm-advice" type="checkbox" />
-              <span class="switch-text">
-                <b>Use the LLM for advisories</b>
-                Off, the verdict comes from the local rules engine alone — no network call, no key needed.
-              </span>
-            </label>
+          <details class="note">
+            <summary>Why only localhost</summary>
+            <p>
+              Only <code>localhost</code> and <code>127.0.0.1</code> can reach the extension. That list lives in
+              <code>manifest.json</code> and cannot be changed from this page — a page on any other origin is
+              refused by the browser before the extension sees it.
+            </p>
+          </details>
+
+          <p id="dashboard-status" class="status" role="status" aria-live="polite"></p>
+        </section>
+
+        <!-- ---------------------------------------------------------- -->
+        <section id="agent" class="panel" aria-labelledby="agent-title" hidden>
+          <div class="panel-head">
+            <h2 id="agent-title">Agent</h2>
+            <p class="panel-sub">Which model answers, and how much of the page it may see.</p>
           </div>
 
-          <div class="field">
-            <label for="snippet-chars">How much of the page to send when repairing</label>
-            <div class="suffixed">
-              <input id="snippet-chars" type="number" min="1000" max="40000" step="1000" />
-              <span class="suffix">characters of HTML</span>
+          <div class="settings">
+            <div class="setting">
+              <div class="setting-text">
+                <label for="provider">Model provider</label>
+                <p class="hint">Both do the same two jobs. Pick whichever key you have.</p>
+              </div>
+              <div class="setting-control">
+                <select id="provider"></select>
+              </div>
             </div>
-            <p class="hint">Only the block around the missing value is ever sent, stripped of scripts and styling. More characters give the model more to work with and cost more tokens. 12,000 suits most quote pages.</p>
+
+            <div class="setting">
+              <div class="setting-text">
+                <label for="api-key"><span id="key-label">API key</span></label>
+                <p class="hint">
+                  <span id="key-length"></span>
+                  No key? <a id="key-link" href="#" target="_blank" rel="noreferrer noopener">Get one here</a>, or
+                  leave it empty to run on the built-in rules.
+                </p>
+              </div>
+              <div class="setting-control">
+                <input id="api-key" type="password" autocomplete="off" spellcheck="false" />
+              </div>
+            </div>
+
+            <div class="setting">
+              <div class="setting-text">
+                <label for="model">Model</label>
+                <p class="hint">Test connection sends one tiny request, so you find out here rather than mid-scan.</p>
+              </div>
+              <div class="setting-control">
+                <input id="model" type="text" list="model-list" autocomplete="off" spellcheck="false" />
+                <datalist id="model-list"></datalist>
+                <div class="button-row">
+                  <button id="load-models" class="btn ghost small hidden" type="button">Load models</button>
+                  <button id="test-provider" class="btn ghost small" type="button">Test connection</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="setting">
+              <div class="setting-text">
+                <label for="self-heal">Repair broken selectors</label>
+                <p class="hint">When a page moves its markup, ask the model for a replacement selector.</p>
+              </div>
+              <div class="setting-control">
+                <span class="toggle">
+                  <input id="self-heal" type="checkbox" />
+                  <span class="toggle-track" aria-hidden="true"></span>
+                </span>
+              </div>
+            </div>
+
+            <div class="setting">
+              <div class="setting-text">
+                <label for="llm-advice">Use the model for advisories</label>
+                <p class="hint">When off, verdicts come from the local rules engine — no network call, no key needed.</p>
+              </div>
+              <div class="setting-control">
+                <span class="toggle">
+                  <input id="llm-advice" type="checkbox" />
+                  <span class="toggle-track" aria-hidden="true"></span>
+                </span>
+              </div>
+            </div>
+
+            <div class="setting">
+              <div class="setting-text">
+                <label for="snippet-chars">Page budget when repairing</label>
+                <p class="hint">Only the block around the missing value is sent. 12,000 suits most quote pages.</p>
+              </div>
+              <div class="setting-control">
+                <div class="suffixed">
+                  <input id="snippet-chars" type="number" min="1000" max="40000" step="1000" />
+                  <span class="suffix">chars</span>
+                </div>
+              </div>
+            </div>
           </div>
 
-          <footer class="card-foot">
-            <button id="save-settings" class="btn primary small" type="button">Save settings</button>
+          <p id="model-status" class="status" role="status" aria-live="polite"></p>
+
+          <details class="note">
+            <summary>Where the key is kept</summary>
+            <p>
+              Stored in <code>chrome.storage.local</code> on this machine and sent only to
+              <code id="key-host">the provider</code>, from the extension's service worker. It is never exposed to
+              the pages you visit. Keys are held per provider, so switching does not discard the other one.
+            </p>
+          </details>
+
+          <footer class="action-bar">
             <span id="settings-dirty" class="dirty hidden">Unsaved changes</span>
             <p id="settings-status" class="status" role="status" aria-live="polite"></p>
+            <button id="save-settings" class="btn primary small" type="button">Save settings</button>
           </footer>
         </section>
 
-        <section id="targets" class="card">
-          <header class="card-head">
-            <div>
-              <h2>Portfolio targets</h2>
-              <p class="card-sub">The rules engine and the LLM both read these. Targets are what turn a quote into a signal.</p>
-            </div>
-          </header>
+        <!-- ---------------------------------------------------------- -->
+        <section id="targets" class="panel" aria-labelledby="targets-title" hidden>
+          <div class="panel-head">
+            <h2 id="targets-title">Portfolio</h2>
+            <p class="panel-sub">Targets are what turn a quote into a signal. Only the ticker is required.</p>
+          </div>
 
-          <p class="hint">
-            Only the ticker is required. Fill in <em>buy below</em> and <em>sell above</em> and the advisory has a
-            threshold to reason about; leave them empty and every verdict comes back HOLD for want of anything to compare.
-          </p>
-
-          <div class="grid">
+          <div class="position-form">
             <div class="field"><label for="pos-ticker">Ticker <span class="req">required</span></label><input id="pos-ticker" type="text" placeholder="AAPL" maxlength="10" autocomplete="off" /></div>
             <div class="field"><label for="pos-shares">Shares</label><input id="pos-shares" type="number" placeholder="0" step="any" min="0" /></div>
             <div class="field"><label for="pos-cost">Avg cost</label><input id="pos-cost" type="number" placeholder="0.00" step="any" min="0" /></div>
@@ -217,16 +211,18 @@
           <div class="button-row">
             <button id="save-position" class="btn primary small" type="button">Save position</button>
             <button id="suggest-targets" class="btn ghost small" type="button">Suggest targets</button>
-            <label class="checkbox inline"><input id="pos-auto" type="checkbox" /> Keep them updated automatically</label>
+            <label class="checkbox inline"><input id="pos-auto" type="checkbox" /> Keep updated automatically</label>
           </div>
           <p id="position-status" class="status" role="status" aria-live="polite"></p>
 
-          <p class="disclaimer">
-            <strong>Suggest targets</strong> fills the two boxes from your own data — the average of the prices you
-            have scanned for that ticker, or your approved BUY decisions, or your average cost — with a band taken
-            from how much those scans moved. It proposes; you still press Save. Tick <em>automatically</em> and every
-            later scan of that ticker refreshes them for you.
-          </p>
+          <details class="note">
+            <summary>What "Suggest targets" uses</summary>
+            <p>
+              Your own data: the average of the prices you have scanned for that ticker, or your approved BUY
+              decisions, or your average cost — with a band taken from how much those scans moved. It proposes;
+              you still press Save. Tick <em>automatically</em> and every later scan refreshes them for you.
+            </p>
+          </details>
 
           <div class="table-wrap">
             <table id="portfolio-table">
@@ -238,28 +234,50 @@
           </div>
         </section>
 
-        <section id="registry" class="card">
-          <header class="card-head">
-            <div>
-              <h2>Healed selectors</h2>
-              <p class="card-sub">Selectors the agent rewrote after a page changed. Reset to fall back to the shipped defaults.</p>
-            </div>
-          </header>
-          <ul id="registry-list" class="mono lines"></ul>
-          <footer class="card-foot">
+        <!-- ---------------------------------------------------------- -->
+        <section id="access" class="panel" aria-labelledby="access-title" hidden>
+          <div class="panel-head">
+            <h2 id="access-title">Site access</h2>
+            <p class="panel-sub">Which quote pages the extension may re-read on its own.</p>
+          </div>
+
+          <div id="access-list" class="rows"></div>
+          <p id="access-status" class="status" role="status" aria-live="polite"></p>
+
+          <details class="note">
+            <summary>Why background refresh needs this</summary>
+            <p>
+              Scanning a tab you are looking at needs no permission at all — that is what clicking the toolbar icon
+              grants. Refreshing a ticker in the background is different: the page is not open, so the extension
+              needs standing access to that one site. Nothing is granted at install, each host is asked for
+              separately, and you can take any of them back here or from <code>chrome://extensions</code>.
+            </p>
+          </details>
+        </section>
+
+        <!-- ---------------------------------------------------------- -->
+        <section id="registry" class="panel" aria-labelledby="registry-title" hidden>
+          <div class="panel-head">
+            <h2 id="registry-title">Healed selectors</h2>
+            <p class="panel-sub">Selectors the agent rewrote after a page changed.</p>
+          </div>
+
+          <ul id="registry-list" class="entries"></ul>
+
+          <footer class="action-bar">
+            <span class="hint">Safe to reset: anything still broken is repaired again on the next scan.</span>
             <button id="reset-registry" class="btn danger small" type="button">Reset healed selectors</button>
-            <span class="hint">Safe to do: anything still broken is simply repaired again on the next scan.</span>
           </footer>
         </section>
 
-        <section id="repairs" class="card">
-          <header class="card-head">
-            <div>
-              <h2>Repair log</h2>
-              <p class="card-sub">Every repair the agent attempted, newest first — including the ones that failed.</p>
-            </div>
-          </header>
-          <ul id="heal-log" class="mono lines"></ul>
+        <!-- ---------------------------------------------------------- -->
+        <section id="repairs" class="panel" aria-labelledby="repairs-title" hidden>
+          <div class="panel-head">
+            <h2 id="repairs-title">Repair log</h2>
+            <p class="panel-sub">Every repair attempted, newest first — including the ones that failed.</p>
+          </div>
+
+          <ul id="heal-log" class="entries"></ul>
         </section>
       </main>
     </div>

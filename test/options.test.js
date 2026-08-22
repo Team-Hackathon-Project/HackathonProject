@@ -64,11 +64,28 @@ test('the API key field is a password input so it is not shoulder-readable', () 
   assert.equal(el('api-key').getAttribute('type'), 'password');
 });
 
-test('existing healed selectors and the repair log render', () => {
-  assert.match(el('registry-list').textContent, /finance\.yahoo\.com · price → \.qz-8f31ab/);
-  const log = el('heal-log').textContent;
-  assert.match(log, /price → \.qz-8f31ab/);
-  assert.match(log, /FAILED: selector matched no elements/);
+test('existing healed selectors and the repair log render as records', () => {
+  const entry = el('registry-list').querySelector('.entry');
+  assert.match(entry.querySelector('.entry-title').textContent, /finance\.yahoo\.com · price/);
+  assert.equal(entry.querySelector('.entry-detail').textContent, '.qz-8f31ab');
+
+  const rows = Array.from(el('heal-log').querySelectorAll('.entry'));
+  const healed = rows.find((row) => row.querySelector('.pill.ok'));
+  const failed = rows.find((row) => row.querySelector('.pill.bad'));
+
+  // A success shows the selector it adopted; a failure shows why it did not.
+  assert.equal(healed.querySelector('.entry-detail').textContent, '.qz-8f31ab');
+  assert.equal(failed.querySelector('.entry-detail').textContent, 'selector matched no elements');
+  assert.equal(failed.querySelector('.pill.bad').textContent, 'failed');
+});
+
+test('an empty registry says so instead of rendering an empty box', async () => {
+  const { clearRegistry } = await import('../src/lib/storage.js');
+  await clearRegistry();
+  click('reset-registry');
+  await settle();
+  assert.match(el('registry-list').textContent, /No healed selectors yet/);
+  assert.ok(el('registry-list').querySelector('.empty-note'));
 });
 
 test('saving settings persists them and clamps the snippet budget', async () => {
