@@ -15,8 +15,11 @@
  *   GET  /dca/dataset?id=<collection_id>
  *        -> a status object while it builds, a JSON array once it is done
  *
- * "An array means finished" is Bright Data's own signal, not a guess of ours:
- * while a job is building, the same URL answers with an object instead.
+ * Telling "done" from "still building" is the fiddly part: the dataset endpoint
+ * answers with a progress object while the job runs, an array of rows when it
+ * finishes, and — for a job that produced exactly one row — a bare object that
+ * is the row itself. `readDataset` treats a body as progress only when it says
+ * so, rather than assuming anything that is not an array must be unfinished.
  *
  * Failure handling follows the same split their boilerplate uses, for the same
  * reason: a 4xx is a wrong token or a wrong collector id and will never fix
@@ -35,6 +38,62 @@ const DEFAULTS = {
   retries: 3,            // per request, for 5xx and network errors
   requestTimeoutMs: 30000,
 };
+
+/**
+ * Statuses that mean "come back later". Anything else on a `status` field is
+ * either a finished job or a data row that happens to have that key.
+ */
+const BUILDING_STATUSES = new Set([
+  'building', 'running', 'pending', 'collecting', 'in_progress', 'started', 'queued', 'scheduled',
+]);
+
+/**
+ * Parses a response body that may be JSON or NDJSON.
+ *
+ * Bright Data hands back one JSON document for small results and
+ * newline-delimited JSON for larger ones, and the same endpoint does both.
+ */
+export function parseBody(text) {
+  if (!text || !text.trim()) return null;
+  try {
+    return JSON.parse(text);
+  } catch {
+    const rows = [];
+    for (const line of text.split(String.fromCharCode(10))) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      try {
+        rows.push(JSON.parse(trimmed));
+      } catch {
+        return null; // not NDJSON either
+      }
+    }
+    return rows.length ? rows : null;
+  }
+}
+
+/**
+ * Decides whether a dataset body is a finished job.
+ *
+ * The obvious rule — "an array means finished" — is what Bright Data's own
+ * boilerplate uses, and it is not enough: a collector that produced exactly one
+ * row answers with a bare object, which that rule reads as "still building"
+ * until the poll loop gives up on a job that finished in seconds. So the test
+ * is the other way around: a body is a progress report only when it says so.
+ */
+export function readDataset(body) {
+  if (Array.isArray(body)) {
+    return body.length ? { ready: true, rows: body, status: 'ready' } : { ready: false, rows: [], status: 'empty' };
+  }
+  if (body && typeof body === 'object') {
+    const status = String(body.status || body.state || '').toLowerCase();
+    if (status && BUILDING_STATUSES.has(status)) return { ready: false, rows: [], status };
+    if (!Object.keys(body).length) return { ready: false, rows: [], status: 'empty' };
+    if (body.error) return { ready: false, rows: [], status: String(body.error).slice(0, 80) };
+    return { ready: true, rows: [body], status: 'ready' }; // a single-row result
+  }
+  return { ready: false, rows: [], status: 'building' };
+}
 
 /** Thrown for anything the API refuses. `retryable` drives the backoff. */
 export class StudioError extends Error {
@@ -95,12 +154,7 @@ async function request(url, init, { apiToken, retries, requestTimeoutMs, fetchIm
     try {
       const response = await fetchImpl(url, { ...init, headers: headers(apiToken), signal: controller.signal });
       const text = await response.text();
-      let parsed = null;
-      try {
-        parsed = text ? JSON.parse(text) : null;
-      } catch {
-        parsed = null;
-      }
+      const parsed = parseBody(text);
 
       if (response.status >= 400 && response.status < 500) {
         const detail = (parsed && (parsed.error || parsed.message)) || text.slice(0, 200) || response.statusText;
@@ -160,10 +214,7 @@ export async function fetchDataset({ collectionId, apiToken, options = {}, fetch
   const url = `${STUDIO_API}${DATASET_PATH}?id=${encodeURIComponent(collectionId)}`;
   const body = await request(url, { method: 'GET' }, { apiToken, retries, requestTimeoutMs, fetchImpl });
 
-  if (Array.isArray(body)) {
-    return body.length ? { ready: true, rows: body, status: 'ready' } : { ready: false, rows: [], status: 'empty' };
-  }
-  return { ready: false, rows: [], status: (body && (body.status || body.state)) || 'building' };
+  return readDataset(body);
 }
 
 /**

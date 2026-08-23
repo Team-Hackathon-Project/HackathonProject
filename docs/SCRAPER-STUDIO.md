@@ -72,13 +72,18 @@ A real run prints the snapshot id, polls until the dataset is ready, and lists
 what came back:
 
 ```
-[studio] collector: c_xxxxx · token: brd_…40 chars
-[studio] queued — snapshot s_yyyyy
-[studio] waiting (building) — attempt 1
-[studio] dataset ready — 1 row(s) after 2 poll(s)
-[studio] 1 usable snapshot(s) in 8431ms
-[studio]   AAPL  USD 224.5 (+1.80%)
+[studio] collector: c_xxxxxxxx · token: 49fd…36 chars
+[studio] queued — snapshot j_yyyyyyyy
+[studio] waiting (collecting) — attempt 1
+[studio] waiting (building) — attempt 2
+[studio] dataset ready — 2 row(s) after 3 poll(s)
+[studio] 2 usable snapshot(s) in 13623ms
+[studio]   MSFT  USD 483.24 (0.43%)
+[studio]   AAPL  USD 309.35 (-0.63%)
 ```
+
+A run takes roughly 15–20 seconds for one or two tickers, most of it the
+collector starting up on their side.
 
 ---
 
@@ -115,7 +120,18 @@ GET  https://api.brightdata.com/dca/dataset?id=<snapshot id>
      -> a JSON array once it is finished
 ```
 
-"An array means finished" is Bright Data's own signal, not an inference of ours.
+Telling "finished" from "still building" is the fiddly part, and the obvious
+rule is wrong. Bright Data's own boilerplate treats *an array* as the finished
+signal — but a collector that produced exactly **one** row answers with a bare
+object, which that rule reads as "still building" until the poll loop gives up
+on a job that finished in fifteen seconds. Observed, not theorised: the first
+real run here timed out after five minutes on a dataset that had been sitting
+there ready the whole time.
+
+So the test runs the other way around: a body counts as progress only when it
+says so (`status`/`state` of building, running, collecting, pending, queued),
+and anything else with content in it is data. Arrays, single objects and
+newline-delimited JSON are all read.
 
 Two failure modes are treated differently on purpose, following their
 boilerplate: a **4xx fails immediately**, because a wrong token or a wrong

@@ -11,7 +11,7 @@ import assert from 'node:assert/strict';
 import {
   studioFromEnv, describeToken, triggerCollector, fetchDataset, runCollector,
   snapshotFromRow, inputsForTickers, scrapeThroughStudio, StudioError,
-  STUDIO_API,
+  readDataset, parseBody, STUDIO_API,
 } from '../agent/studio.mjs';
 import { createBridge } from '../agent/server.mjs';
 
@@ -162,6 +162,56 @@ test('a status object means still building; an array means done', async () => {
   const done = await fetchDataset({ collectionId: 's', apiToken: TOKEN, options: fast, fetchImpl: stub({ json: [{ ticker: 'AAPL' }] }) });
   assert.equal(done.ready, true);
   assert.equal(done.rows.length, 1);
+});
+
+test('a collector that produced one row answers with a bare object, not an array', () => {
+  // What a real run returns. "Not an array means still building" polls a job
+  // that finished in seconds until the loop gives up — this is that bug, pinned.
+  const row = { ticker: 'AAPL', current_price: 309.35, currency: 'USD', change_percentage: '-0.63%' };
+  const result = readDataset(row);
+  assert.equal(result.ready, true);
+  assert.deepEqual(result.rows, [row]);
+});
+
+test('readDataset treats a body as progress only when it says so', () => {
+  for (const status of ['building', 'running', 'pending', 'collecting', 'queued', 'IN_PROGRESS']) {
+    assert.equal(readDataset({ status }).ready, false, status);
+  }
+  assert.equal(readDataset({ state: 'running' }).ready, false);
+  assert.equal(readDataset({}).ready, false, 'nothing yet');
+  assert.equal(readDataset([]).ready, false, 'an empty dataset is not a result');
+  assert.equal(readDataset(null).ready, false);
+
+  const failed = readDataset({ error: 'collector crashed' });
+  assert.equal(failed.ready, false);
+  assert.match(failed.status, /collector crashed/);
+
+  // A row that happens to carry a status field is still a row.
+  const row = readDataset({ ticker: 'AAPL', current_price: 1, status: 'ok' });
+  assert.equal(row.ready, true);
+  assert.equal(row.rows.length, 1);
+});
+
+test('parseBody reads JSON and NDJSON, and gives up on neither-of-those', () => {
+  assert.deepEqual(parseBody('{"a":1}'), { a: 1 });
+  assert.deepEqual(parseBody('[{"a":1}]'), [{ a: 1 }]);
+  assert.deepEqual(parseBody(['{"a":1}', '{"a":2}'].join(String.fromCharCode(10))), [{ a: 1 }, { a: 2 }]);
+  assert.deepEqual(parseBody(['{"a":1}', '', '{"a":2}', ''].join(String.fromCharCode(10))), [{ a: 1 }, { a: 2 }]);
+  assert.equal(parseBody(''), null);
+  assert.equal(parseBody('   '), null);
+  assert.equal(parseBody('<html>gateway</html>'), null);
+});
+
+test('a single-row job is collected without waiting out the poll loop', async () => {
+  const fetchImpl = stub([
+    { json: { collection_id: 'snap_single' } },
+    { json: { ticker: 'AAPL', current_price: 309.35 } },
+  ]);
+  const run = await runCollector({
+    collectorId: COLLECTOR, apiToken: TOKEN, inputs: [{ url: 'u' }], options: fast, fetchImpl,
+  });
+  assert.equal(run.attempts, 1, 'the first poll already had the answer');
+  assert.equal(run.rows.length, 1);
 });
 
 test('runCollector waits through the building phase and reports progress', async () => {
