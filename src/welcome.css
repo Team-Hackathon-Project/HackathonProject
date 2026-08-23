@@ -1,0 +1,638 @@
+/*
+ * The setup guide.
+ *
+ * A first run is the one moment where a product gets to say what it is before
+ * anyone has formed an opinion, so this page is laid out like a statement
+ * rather than like a form:
+ *
+ *  1. A fixed rail on the left carries the identity, the progress and the five
+ *     step names. It never moves. Everything that changes lives on the right,
+ *     which is what stops five steps from feeling like five unrelated screens.
+ *  2. One question per step, set large. The headline is display type at a size
+ *     nothing else in the product uses, because this is the only page whose job
+ *     is to be read rather than scanned.
+ *  3. Nothing here is mandatory. Every step can be passed through, and the
+ *     footer says so — an onboarding that traps you is a worse first impression
+ *     than no onboarding at all.
+ */
+
+body.welcome {
+  min-height: 100vh;
+  font-size: 13.5px;
+  overflow-x: hidden;
+}
+
+.split {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: 340px minmax(0, 1fr);
+  min-height: 100vh;
+}
+
+/* ---------------------------------------------------------------- *
+ * The rail
+ * ---------------------------------------------------------------- */
+
+.rail-side {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow: hidden;
+  background: var(--surface-1);
+  border-right: 1px solid var(--line);
+}
+
+/* The engineered texture: a ruled grid at an opacity you notice only once you
+   look for it, with the agent's own hue pooling in the far corner. It is the
+   only ornament on the page and it is confined to this one panel. */
+.rail-mesh {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: var(--mesh);
+  background-size: var(--mesh-size);
+  mask-image: radial-gradient(120% 80% at 20% 12%, #000 0%, transparent 72%);
+  -webkit-mask-image: radial-gradient(120% 80% at 20% 12%, #000 0%, transparent 72%);
+  opacity: 0.9;
+}
+.rail-side::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(70% 40% at 10% 100%, rgba(var(--accent-rgb), 0.13), transparent 70%);
+}
+
+.rail-body {
+  position: relative;
+  z-index: 1;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-7);
+  padding: var(--s-7) var(--s-6);
+}
+
+.rail-sub {
+  font-size: 11px;
+  color: var(--ink-3);
+  letter-spacing: 0.02em;
+}
+
+.rail-progress { display: flex; flex-direction: column; gap: var(--s-2); }
+
+.rail-count {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  color: var(--ink-3);
+}
+
+/*
+ * The step list.
+ *
+ * Three states, each carried by the tick as well as by weight, so the list is
+ * legible with the colour turned off: done is a filled check, current is a
+ * ringed dot, still to come is an empty outline.
+ */
+.rail-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  counter-reset: railstep;
+}
+
+.rail-steps li {
+  display: grid;
+  grid-template-columns: 20px 1fr;
+  align-items: start;
+  gap: var(--s-3);
+  padding: 10px 10px;
+  border-radius: var(--r-2);
+  color: var(--ink-3);
+  transition: background var(--fast) var(--ease), color var(--fast) var(--ease);
+}
+
+.rail-step-text { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.rail-step-text b { font-size: 12.5px; font-weight: 560; letter-spacing: -0.01em; }
+.rail-step-text span { font-size: 11px; color: var(--ink-4); }
+
+.tick {
+  position: relative;
+  width: 18px;
+  height: 18px;
+  margin-top: 1px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--line-3);
+  transition: background var(--base) var(--ease), border-color var(--base) var(--ease);
+}
+
+.rail-steps li[data-state="current"] { background: var(--surface-2); color: var(--ink); }
+.rail-steps li[data-state="current"] b { font-weight: 620; }
+.rail-steps li[data-state="current"] .tick { border-color: var(--accent); }
+.rail-steps li[data-state="current"] .tick::after {
+  content: "";
+  position: absolute;
+  inset: 4px;
+  border-radius: var(--r-pill);
+  background: var(--accent);
+}
+
+.rail-steps li[data-state="done"] { color: var(--ink-2); }
+.rail-steps li[data-state="done"] .tick { background: var(--up); border-color: var(--up); }
+.rail-steps li[data-state="done"] .tick::after {
+  content: "";
+  position: absolute;
+  left: 5px;
+  top: 5px;
+  width: 7px;
+  height: 4px;
+  border: 1.6px solid var(--canvas);
+  border-top: 0;
+  border-right: 0;
+  transform: rotate(-45deg);
+}
+
+.rail-foot {
+  margin: auto 0 0;
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--ink-3);
+}
+.rail-foot code { padding: 0; border: 0; background: none; color: var(--ink-2); }
+
+/* ---------------------------------------------------------------- *
+ * The stage
+ * ---------------------------------------------------------------- */
+
+.stage {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: var(--s-6) var(--s-8) 0;
+  max-width: 780px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+.stage-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-4);
+  min-height: 34px;
+}
+
+.eyebrow {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-4);
+}
+
+.step {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-6);
+  padding: var(--s-8) 0 var(--s-7);
+  animation: step-in var(--slow) var(--spring) both;
+}
+.step[hidden] { display: none; }
+
+@keyframes step-in {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: none; }
+}
+
+.step-head { display: flex; flex-direction: column; gap: var(--s-4); }
+
+.step-head h1 {
+  font-size: clamp(34px, 4.4vw, 46px);
+  line-height: 1.04;
+  letter-spacing: -0.035em;
+  font-weight: 640;
+}
+
+.lede {
+  margin: 0;
+  max-width: 58ch;
+  font-size: 14.5px;
+  line-height: 1.62;
+  color: var(--ink-2);
+  letter-spacing: -0.008em;
+}
+
+/* ---------------------------------------------------------------- *
+ * Step 0 — the pillars
+ * ---------------------------------------------------------------- */
+
+.pillars {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  border-top: 1px solid var(--line);
+}
+
+.pillars li {
+  display: grid;
+  grid-template-columns: 34px 1fr;
+  gap: var(--s-4);
+  align-items: start;
+  padding: var(--s-5) 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.pillar-icon {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--surface-1);
+  color: var(--accent);
+}
+.pillar-icon svg { width: 17px; height: 17px; }
+
+.pillars b,
+.loop b {
+  display: block;
+  font-size: 13.5px;
+  font-weight: 600;
+  letter-spacing: -0.014em;
+  margin-bottom: 3px;
+  color: var(--ink);
+}
+.pillars p,
+.loop p {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--ink-2);
+  max-width: 62ch;
+}
+
+/* ---------------------------------------------------------------- *
+ * Step 1 — the loop
+ * ---------------------------------------------------------------- */
+
+.loop {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: var(--s-3);
+}
+
+.loop li {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  padding: var(--s-5);
+  border-radius: var(--r-3);
+  border: 1px solid var(--line);
+  background: var(--surface-1);
+  box-shadow: var(--e-1);
+}
+
+.loop-n {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  color: var(--accent);
+}
+
+.aside-note {
+  padding: var(--s-5);
+  border-radius: var(--r-3);
+  background: var(--surface-1);
+}
+.aside-note b { display: block; font-size: 12.5px; font-weight: 600; margin-bottom: 5px; }
+.aside-note p { margin: 0; font-size: 12px; line-height: 1.65; color: var(--ink-2); max-width: 72ch; }
+
+/* ---------------------------------------------------------------- *
+ * Step 2 — the engine choice
+ * ---------------------------------------------------------------- */
+
+.choices {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: var(--s-3);
+}
+
+/*
+ * A choice card is a radio, drawn as a sheet.
+ *
+ * The selected state is carried three ways — the ring fills, the border
+ * brightens and the sheet lifts a step — so it survives greyscale, and there
+ * is never a moment where two cards look equally chosen.
+ */
+.choice {
+  position: relative;
+  display: grid;
+  grid-template-columns: 18px 1fr;
+  gap: var(--s-3);
+  align-items: start;
+  text-align: left;
+  padding: var(--s-5);
+  border-radius: var(--r-3);
+  border: 1px solid var(--line);
+  background: var(--surface-1);
+  color: var(--ink);
+  font: inherit;
+  box-shadow: var(--e-1);
+  transition: border-color var(--fast) var(--ease), background var(--fast) var(--ease),
+    box-shadow var(--fast) var(--ease), transform var(--fast) var(--ease);
+}
+.choice:hover { border-color: var(--line-3); background: var(--surface-2); }
+.choice:active { transform: translateY(1px); }
+
+.choice-mark {
+  position: relative;
+  width: 18px;
+  height: 18px;
+  margin-top: 1px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--line-3);
+  transition: border-color var(--fast) var(--ease);
+}
+
+.choice[aria-checked="true"] {
+  border-color: var(--accent);
+  background: var(--surface-2);
+  box-shadow: var(--e-2);
+}
+.choice[aria-checked="true"] .choice-mark { border-color: var(--accent); }
+.choice[aria-checked="true"] .choice-mark::after {
+  content: "";
+  position: absolute;
+  inset: 4px;
+  border-radius: var(--r-pill);
+  background: var(--accent);
+}
+
+.choice-body { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.choice-body b { font-size: 13.5px; font-weight: 620; letter-spacing: -0.014em; }
+.choice-body > span { font-size: 12px; line-height: 1.6; color: var(--ink-2); }
+
+.tag {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 2px 7px;
+  border-radius: var(--r-pill);
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-line);
+  color: var(--accent);
+  font-size: 9.5px;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  vertical-align: 2px;
+}
+
+.key-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-4);
+  padding: var(--s-5);
+  border-radius: var(--r-3);
+  animation: rise var(--base) var(--spring) both;
+}
+
+.field-row { display: flex; flex-wrap: wrap; gap: var(--s-3); align-items: flex-end; }
+.field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.field.grow { flex: 1 1 220px; }
+.field.field-action { justify-content: flex-end; }
+.field label {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 10px;
+  font-weight: 640;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.field input,
+.field select { width: 100%; }
+.field-note { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0; text-transform: none; color: var(--ink-4); }
+.field-hint { margin: 0; font-size: 11.5px; line-height: 1.6; color: var(--ink-3); }
+
+/* ---------------------------------------------------------------- *
+ * Step 3 — the first ticker
+ * ---------------------------------------------------------------- */
+
+.track-card { display: flex; flex-direction: column; gap: var(--s-4); padding: var(--s-5); border-radius: var(--r-3); }
+.track-card .field { flex: 1 1 130px; }
+#w-ticker { font-family: var(--font-mono); letter-spacing: 0.06em; text-transform: uppercase; font-weight: 600; }
+
+.tag-list { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: var(--s-2); }
+.tag-list:empty { display: none; }
+.tag-list li {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 11px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--up-line);
+  background: var(--up-soft);
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  animation: rise var(--fast) var(--spring) both;
+}
+.tag-list li::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: var(--r-pill);
+  background: var(--up);
+}
+
+.switch-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-5);
+  padding: var(--s-5);
+  border-radius: var(--r-3);
+}
+.switch-text b { display: block; font-size: 13px; font-weight: 600; letter-spacing: -0.012em; margin-bottom: 3px; }
+.switch-text p { margin: 0; font-size: 12px; line-height: 1.6; color: var(--ink-2); max-width: 60ch; }
+
+/* The switch. The real checkbox stays: it carries the state, the label
+   association and the keyboard behaviour, and is only made invisible. */
+.toggle { position: relative; display: inline-flex; flex: none; width: 44px; height: 26px; cursor: pointer; }
+.toggle input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+  z-index: 1;
+}
+.toggle input::after { display: none; }
+.toggle-track {
+  position: absolute;
+  inset: 0;
+  border-radius: var(--r-pill);
+  background: var(--well);
+  border: 1px solid var(--line-3);
+  transition: background var(--base) var(--ease), border-color var(--base) var(--ease);
+}
+.toggle-track::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: var(--r-pill);
+  background: var(--ink-3);
+  transition: transform var(--base) var(--spring), background var(--base) var(--ease);
+}
+.toggle input:checked + .toggle-track { background: var(--solid); border-color: var(--solid); }
+.toggle input:checked + .toggle-track::after { transform: translateX(18px); background: var(--solid-ink); }
+.toggle input:focus-visible + .toggle-track {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px var(--focus-halo);
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ---------------------------------------------------------------- *
+ * Step 4 — the recap
+ * ---------------------------------------------------------------- */
+
+.recap {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  border-radius: var(--r-3);
+  background: var(--surface-1);
+  box-shadow: var(--e-1);
+  overflow: hidden;
+}
+
+.recap li {
+  display: grid;
+  grid-template-columns: 20px 1fr auto;
+  align-items: center;
+  gap: var(--s-4);
+  padding: var(--s-4) var(--s-5);
+}
+.recap li + li { border-top: 1px solid var(--line); }
+
+.recap-state {
+  position: relative;
+  width: 18px;
+  height: 18px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--line-3);
+}
+.recap li[data-done="true"] .recap-state { background: var(--up); border-color: var(--up); }
+.recap li[data-done="true"] .recap-state::after {
+  content: "";
+  position: absolute;
+  left: 5px;
+  top: 5px;
+  width: 7px;
+  height: 4px;
+  border: 1.6px solid var(--canvas);
+  border-top: 0;
+  border-right: 0;
+  transform: rotate(-45deg);
+}
+
+.recap-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.recap-text b { font-size: 12.5px; font-weight: 570; letter-spacing: -0.01em; }
+.recap-text span { font-size: 11.5px; color: var(--ink-3); }
+
+.recap-value {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-2);
+  text-align: right;
+  white-space: nowrap;
+}
+
+.launch { display: flex; flex-wrap: wrap; gap: var(--s-3); }
+
+/* ---------------------------------------------------------------- *
+ * The footer
+ * ---------------------------------------------------------------- */
+
+.stage-foot {
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-4);
+  padding: var(--s-4) 0 var(--s-6);
+  background: linear-gradient(to top, var(--canvas) 62%, transparent);
+}
+
+.dots { display: flex; gap: 6px; }
+.dots span {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--r-pill);
+  background: var(--line-3);
+  transition: background var(--base) var(--ease), width var(--base) var(--spring);
+}
+.dots span[data-on="true"] { background: var(--ink); width: 18px; }
+
+/* ---------------------------------------------------------------- *
+ * Narrow windows
+ * ---------------------------------------------------------------- */
+
+@media (max-width: 900px) {
+  .split { grid-template-columns: 1fr; }
+
+  /* The rail collapses to a header: the identity and the progress meter are
+     worth keeping, the five step names are not worth a screenful. */
+  .rail-side { position: static; height: auto; border-right: 0; border-bottom: 1px solid var(--line); }
+  .rail-body { flex-direction: row; align-items: center; justify-content: space-between; gap: var(--s-4); padding: var(--s-4) var(--s-5); }
+  .rail-steps, .rail-foot { display: none; }
+  .rail-progress { flex: 1 1 auto; max-width: 260px; }
+
+  .stage { padding: var(--s-3) var(--s-5) 0; }
+  .step { padding: var(--s-6) 0 var(--s-6); gap: var(--s-5); }
+  .step-head h1 { font-size: clamp(28px, 8vw, 36px); }
+  .switch-row { flex-direction: column; align-items: flex-start; gap: var(--s-4); }
+}

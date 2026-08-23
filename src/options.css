@@ -2,26 +2,29 @@
  * Settings page.
  *
  * Built on the shared material in `theme.css`; nothing here redefines a colour
- * and nothing here redraws the glass - every panel carries `.pane` and gets
- * the fill, the rim and the blur from one place.
+ * and nothing here redraws the sheet — every panel carries `.pane` and gets its
+ * fill, its hairline and its shadow from one place.
  *
- * Three decisions shape the layout:
+ * Four decisions shape the layout:
  *
  *  1. One section at a time. The rail switches panels rather than scrolling to
- *     them. Six stacked cards meant everything was on screen at once and none
- *     of it was findable; the nav now does real work, each entry carries an
- *     icon so the shape is what you aim at, and the active entry is marked in
- *     the accent so the rail states where you are without being read.
- *  2. The chrome floats. The rail and the page header are panes with their own
- *     edges, held clear of the window rather than welded to it, and the
- *     content scrolls underneath them.
+ *     them. Eight stacked cards would put everything on screen at once and none
+ *     of it within reach; the rail does the real work, each entry carries an
+ *     icon so the shape is what you aim at, and the active entry is a raised
+ *     sheet so the rail states where you are without being read.
+ *  2. The rail and the page head are structure, not cards. They are held apart
+ *     from the content by a hairline rather than by a floating panel, which is
+ *     what stops a settings page from reading as a stack of unrelated widgets.
  *  3. Settings read as rows, not as a form. Label and one line of help on the
  *     left, the control on the right, a hairline between each. That is the
  *     shape a person scanning for one switch expects, and it makes the help
  *     text subordinate to the control instead of competing with it.
+ *  4. The first thing you land on is a state of play, not a field. "Getting
+ *     started" reads what is actually configured back out of storage, so the
+ *     page opens with an answer rather than with a question.
  *
- * Longer explanations live in a collapsed <details>. They are worth keeping -
- * they say where a key is stored and what a button will actually do - but not
+ * Longer explanations live in a collapsed <details>. They are worth keeping —
+ * they say where a key is stored and what a button will actually do — but not
  * worth spending the reader's attention on before they have asked.
  */
 
@@ -38,33 +41,31 @@ body.options {
   position: relative;
   z-index: 1;
   display: grid;
-  grid-template-columns: 262px minmax(0, 1fr);
-  gap: 20px;
+  grid-template-columns: 264px minmax(0, 1fr);
   min-height: 100vh;
-  max-width: 1320px;
-  margin: 0 auto;
-  padding: 20px 24px 40px;
 }
 
 /* ---------------------------------------------------------------- *
  * Sidebar
  * ---------------------------------------------------------------- */
 
-.sidebar { min-width: 0; }
+.sidebar {
+  min-width: 0;
+  background: var(--surface-1);
+  border-right: 1px solid var(--line);
+}
 
 .sidebar-inner {
   position: sticky;
-  top: 20px;
+  top: 0;
   display: flex;
   flex-direction: column;
-  gap: 22px;
-  padding: 18px 14px;
-  height: calc(100vh - 60px);
-  border-radius: var(--r-3);
-  box-shadow: var(--lift-2);
+  gap: var(--s-6);
+  padding: var(--s-6) var(--s-4);
+  height: 100vh;
 }
 
-.brand { padding: 4px 6px; }
+.brand { padding: 0 var(--s-2); }
 .brand-text .sub { font-size: 11px; color: var(--ink-3); }
 
 .nav { display: flex; flex-direction: column; gap: 2px; }
@@ -72,9 +73,9 @@ body.options {
 .nav-link {
   position: relative;
   display: grid;
-  grid-template-columns: 22px 1fr;
+  grid-template-columns: 20px 1fr;
   align-items: center;
-  gap: 11px;
+  gap: var(--s-3);
   padding: 9px 11px;
   border-radius: var(--r-2);
   border: 1px solid transparent;
@@ -83,23 +84,21 @@ body.options {
   font-size: 13px;
   font-weight: 500;
   transition: background var(--fast) var(--ease), color var(--fast) var(--ease),
-    border-color var(--fast) var(--ease), box-shadow var(--fast) var(--ease);
+    border-color var(--fast) var(--ease);
 }
 
-/* The marker for the section you are in: a short bar of the accent on the
-   leading edge, which grows into place rather than blinking on. */
+/* The marker for the section you are in: a short bar on the leading edge,
+   which grows into place rather than blinking on. */
 .nav-link::before {
   content: "";
   position: absolute;
   left: -1px;
   top: 50%;
   width: 3px;
-  height: 18px;
+  height: 16px;
   border-radius: 0 3px 3px 0;
   background: var(--accent);
-  box-shadow: 0 0 12px -1px rgba(var(--accent-rgb), 0.9);
   transform: translateY(-50%) scaleY(0);
-  transform-origin: 50% 50%;
   opacity: 0;
   transition: transform var(--base) var(--spring), opacity var(--fast) var(--ease);
 }
@@ -107,22 +106,21 @@ body.options {
 .nav-icon {
   display: grid;
   place-items: center;
-  width: 22px;
-  height: 22px;
-  color: var(--ink-3);
-  transition: color var(--fast) var(--ease), transform var(--base) var(--spring);
+  width: 20px;
+  height: 20px;
+  color: var(--ink-4);
+  transition: color var(--fast) var(--ease);
 }
 .nav-icon svg { width: 17px; height: 17px; }
 
-.nav-link:hover { background: var(--glass-2); color: var(--ink); }
-.nav-link:hover .nav-icon { color: var(--ink-2); transform: translateX(1px); }
+.nav-link:hover { background: var(--surface-2); color: var(--ink); }
+.nav-link:hover .nav-icon { color: var(--ink-2); }
 
-/* The active section is a raised pane of its own: the same material as the
-   rail it sits in, one step brighter and lit along its top edge. */
+/* The active section is a raised sheet: one step brighter than the rail it
+   sits in, with its own hairline. */
 .nav-link.is-active {
-  background: var(--glass-3);
-  border-color: var(--edge);
-  box-shadow: var(--lift-1);
+  background: var(--surface-3);
+  border-color: var(--line);
   color: var(--ink);
   font-weight: 600;
 }
@@ -131,12 +129,18 @@ body.options {
 
 .sidebar-foot {
   margin: auto 0 0;
-  padding: 0 6px;
+  padding: 0 var(--s-2);
   font-size: 11px;
-  line-height: 1.55;
+  line-height: 1.6;
   color: var(--ink-3);
 }
-.sidebar-foot code { font-size: 10.5px; font-family: var(--font-mono); }
+.sidebar-foot code {
+  font-size: 10.5px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink-3);
+}
 
 /* ---------------------------------------------------------------- *
  * Page head
@@ -146,39 +150,33 @@ main {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 20px;
-  padding-bottom: 40px;
 }
 
-/* Stays put while the panel scrolls under it, which is the whole reason it is
-   glass: you can see there is something moving beneath. Its lower edge is the
-   instrument's ruled scale - one of exactly two places that motif appears. */
+/* Stays put while the panel scrolls under it. Its lower edge is the
+   instrument's ruled scale — one of exactly two places that motif appears. */
 .page-head {
   position: sticky;
-  top: 20px;
+  top: 0;
   z-index: 5;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
+  gap: var(--s-4);
   flex-wrap: wrap;
-  padding: 13px 18px;
-  border-radius: var(--r-3);
-  background: color-mix(in srgb, var(--canvas) 55%, var(--glass));
-  box-shadow: var(--lift-2);
-  backdrop-filter: blur(26px) saturate(var(--sat));
-  -webkit-backdrop-filter: blur(26px) saturate(var(--sat));
+  padding: var(--s-4) var(--s-7);
+  background: color-mix(in srgb, var(--canvas) 88%, transparent);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
 }
 
-.page-head::before {
+.page-head::after {
   content: "";
   position: absolute;
-  left: 14px;
-  right: 14px;
+  left: 0;
+  right: 0;
   bottom: 0;
   height: 1px;
-  background-image: repeating-linear-gradient(90deg, var(--edge-2) 0 1px, transparent 1px 7px);
-  opacity: 0.5;
+  background-image: repeating-linear-gradient(90deg, var(--line-2) 0 1px, transparent 1px 6px);
 }
 
 .page-head-text { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
@@ -188,30 +186,24 @@ main {
   font-family: var(--font-mono);
   font-size: 9.5px;
   font-weight: 600;
-  letter-spacing: 0.14em;
+  letter-spacing: 0.16em;
   text-transform: uppercase;
-  color: var(--accent);
-  opacity: 0.85;
+  color: var(--ink-3);
 }
 
-.page-head h1 {
-  font-size: 20px;
-  font-weight: 640;
-  letter-spacing: -0.025em;
-}
+.page-head h1 { font-size: 19px; font-weight: 640; letter-spacing: -0.028em; }
 
 /* Agent status belongs at the top of the page, not buried in the rail: it is
    the one fact that changes what every other setting here will do. */
 .agent-chip {
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: var(--s-2);
   margin: 0;
   padding: 6px 13px 6px 11px;
-  border-radius: 99px;
-  border: 1px solid var(--edge);
-  background: var(--glass-2);
-  box-shadow: var(--lift-1);
+  border-radius: var(--r-pill);
+  border: 1px solid var(--line);
+  background: var(--surface-1);
   font-size: 11.5px;
   color: var(--ink-2);
   white-space: nowrap;
@@ -221,9 +213,8 @@ main {
   width: 6px;
   height: 6px;
   flex: none;
-  border-radius: 99px;
+  border-radius: var(--r-pill);
   background: currentColor;
-  box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 22%, transparent);
 }
 
 .agent-chip .agent-model { color: var(--ink-2); font-family: var(--font-mono); font-size: 11px; }
@@ -237,9 +228,9 @@ main {
   display: inline-block;
   width: 1px;
   height: 10px;
-  margin-right: 9px;
+  margin-right: var(--s-2);
   vertical-align: -1px;
-  background: var(--edge-2);
+  background: var(--line-2);
 }
 
 /* ---------------------------------------------------------------- *
@@ -249,44 +240,97 @@ main {
 .panel {
   display: flex;
   flex-direction: column;
-  gap: 18px;
-  max-width: 840px;
+  gap: var(--s-5);
+  max-width: 860px;
+  padding: var(--s-7) var(--s-7) var(--s-8);
 }
 .panel[hidden] { display: none; }
 
-.panel-head h2 {
-  font-size: 17px;
-  font-weight: 640;
-  letter-spacing: -0.02em;
-}
+.panel-head h2 { font-size: 22px; font-weight: 640; letter-spacing: -0.028em; }
 
 .panel-sub {
-  margin: 5px 0 0;
-  font-size: 12.5px;
-  line-height: 1.55;
+  margin: var(--s-2) 0 0;
+  font-size: 13px;
+  line-height: 1.6;
   color: var(--ink-2);
-  max-width: 62ch;
+  max-width: 64ch;
+}
+
+/* ---------------------------------------------------------------- *
+ * The checklist
+ *
+ * The one place on this page that reports rather than asks. Each row states
+ * a fact read back out of storage, with the reading on the right — the same
+ * shape as the recap at the end of the setup guide, deliberately.
+ * ---------------------------------------------------------------- */
+
+.checklist {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.checklist li {
+  display: grid;
+  grid-template-columns: 18px 1fr auto;
+  align-items: center;
+  gap: var(--s-4);
+  padding: var(--s-4) var(--s-5);
+}
+.checklist li + li { border-top: 1px solid var(--line); }
+
+.check-state {
+  position: relative;
+  width: 18px;
+  height: 18px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--line-3);
+}
+.checklist li[data-done="true"] .check-state { background: var(--up); border-color: var(--up); }
+.checklist li[data-done="true"] .check-state::after {
+  content: "";
+  position: absolute;
+  left: 5px;
+  top: 5px;
+  width: 7px;
+  height: 4px;
+  border: 1.6px solid var(--canvas);
+  border-top: 0;
+  border-right: 0;
+  transform: rotate(-45deg);
+}
+
+.check-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.check-text b { font-size: 12.5px; font-weight: 570; letter-spacing: -0.01em; }
+.check-text span { font-size: 11.5px; line-height: 1.5; color: var(--ink-3); }
+
+.check-value {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-2);
+  text-align: right;
+  white-space: nowrap;
 }
 
 /* ---------------------------------------------------------------- *
  * Setting rows
  * ---------------------------------------------------------------- */
 
-.settings {
-  border-radius: var(--r-3);
-  overflow: hidden;
-}
+.settings { overflow: hidden; }
 
 .setting {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 264px);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 268px);
   align-items: start;
-  gap: 22px;
-  padding: 16px 18px;
+  gap: var(--s-6);
+  padding: var(--s-4) var(--s-5);
   transition: background var(--fast) var(--ease);
 }
-.setting + .setting { border-top: 1px solid var(--edge); }
-.setting:hover { background: color-mix(in srgb, var(--glass-2) 55%, transparent); }
+.setting + .setting { border-top: 1px solid var(--line); }
+.setting:hover { background: var(--surface-2); }
 
 .setting-text { min-width: 0; }
 
@@ -296,43 +340,41 @@ main {
   font-size: 13px;
   font-weight: 570;
   color: var(--ink);
+  letter-spacing: -0.01em;
 }
 
 .setting-text .hint {
   margin: 4px 0 0;
   font-size: 11.5px;
-  line-height: 1.55;
+  line-height: 1.6;
   color: var(--ink-3);
-  max-width: 54ch;
+  max-width: 56ch;
 }
 .setting-text .hint code,
 .panel code,
-.note code { font-family: var(--font-mono); font-size: 11px; }
-
-.setting-text a { color: var(--accent); text-underline-offset: 2px; }
-.setting-text a:hover { color: var(--ink); }
+.note code { font-size: 10.5px; }
 
 .setting-control {
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: 8px;
+  gap: var(--s-2);
   min-width: 0;
 }
 .setting-control > input,
 .setting-control > select { width: 100%; }
 
 /* A control that is not a text field sits at the end of its row rather than
-   filling it: a switch or a button stretched across 264px reads as a broken
+   filling it: a switch or a button stretched across 268px reads as a broken
    input rather than as a deliberate width. Nested buttons inside .button-row
    are left alone, since those are meant to sit under the field they belong to. */
 .setting-control:has(> .toggle) { align-items: flex-end; }
 .setting-control > .btn { align-self: flex-end; }
 
-.button-row { display: flex; flex-wrap: wrap; gap: 7px; align-items: center; }
+.button-row { display: flex; flex-wrap: wrap; gap: var(--s-2); align-items: center; }
 
-.suffixed { display: flex; align-items: center; gap: 9px; }
-.suffixed input { width: 112px; }
+.suffixed { display: flex; align-items: center; gap: var(--s-2); }
+.suffixed input { width: 116px; }
 .suffix { font-size: 11.5px; color: var(--ink-3); white-space: nowrap; }
 
 /* ---------------------------------------------------------------- *
@@ -364,12 +406,10 @@ main {
 .toggle-track {
   position: absolute;
   inset: 0;
-  border-radius: 99px;
+  border-radius: var(--r-pill);
   background: var(--well);
-  border: 1px solid var(--edge-2);
-  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.3);
-  transition: background var(--base) var(--ease), border-color var(--base) var(--ease),
-    box-shadow var(--base) var(--ease);
+  border: 1px solid var(--line-3);
+  transition: background var(--base) var(--ease), border-color var(--base) var(--ease);
 }
 .toggle-track::after {
   content: "";
@@ -378,40 +418,32 @@ main {
   left: 2px;
   width: 18px;
   height: 18px;
-  border-radius: 99px;
+  border-radius: var(--r-pill);
   background: var(--ink-3);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
   transition: transform var(--base) var(--spring), background var(--base) var(--ease);
 }
 
-.toggle input:checked + .toggle-track {
-  background: linear-gradient(170deg, var(--accent), var(--accent-2));
-  border-color: color-mix(in srgb, var(--accent) 70%, transparent);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4), 0 2px 14px -4px rgba(var(--accent-rgb), 0.8);
-}
-.toggle input:checked + .toggle-track::after { transform: translateX(18px); background: var(--accent-ink); }
+.toggle input:checked + .toggle-track { background: var(--solid); border-color: var(--solid); }
+.toggle input:checked + .toggle-track::after { transform: translateX(18px); background: var(--solid-ink); }
 .toggle input:focus-visible + .toggle-track {
   outline: 2px solid var(--focus);
   outline-offset: 2px;
-  box-shadow: 0 0 0 4px var(--focus-ring);
+  box-shadow: 0 0 0 4px var(--focus-halo);
 }
 
 /* ---------------------------------------------------------------- *
  * Collapsed explanations
  * ---------------------------------------------------------------- */
 
-.note {
-  border-radius: var(--r-2);
-  padding: 11px 15px;
-}
-.note > summary { font-size: 11.5px; font-weight: 570; color: var(--ink-2); }
+.note { border-radius: var(--r-2); padding: var(--s-3) var(--s-4); }
+.note > summary { font-size: 11.5px; font-weight: 550; color: var(--ink-2); }
 .note > summary:hover { color: var(--ink); }
 .note p {
-  margin: 9px 0 2px;
+  margin: var(--s-2) 0 2px;
   font-size: 11.5px;
-  line-height: 1.65;
+  line-height: 1.7;
   color: var(--ink-3);
-  max-width: 68ch;
+  max-width: 70ch;
 }
 
 /* ---------------------------------------------------------------- *
@@ -423,18 +455,16 @@ main {
 
 .action-bar {
   position: sticky;
-  bottom: 14px;
+  bottom: var(--s-4);
   z-index: 4;
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--s-3);
   flex-wrap: wrap;
-  padding: 11px 16px;
+  padding: var(--s-3) var(--s-4);
   border-radius: var(--r-2);
-  background: color-mix(in srgb, var(--canvas) 50%, var(--glass));
-  box-shadow: var(--lift-2);
-  backdrop-filter: blur(24px) saturate(var(--sat));
-  -webkit-backdrop-filter: blur(24px) saturate(var(--sat));
+  background: var(--raised);
+  box-shadow: var(--e-2);
 }
 .action-bar .btn { margin-left: auto; }
 .action-bar .status { margin: 0; }
@@ -443,10 +473,10 @@ main {
 .dirty {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
+  gap: var(--s-2);
   font-size: 10.5px;
-  font-weight: 650;
-  letter-spacing: 0.06em;
+  font-weight: 640;
+  letter-spacing: 0.07em;
   text-transform: uppercase;
   color: var(--warn);
 }
@@ -454,15 +484,8 @@ main {
   content: "";
   width: 6px;
   height: 6px;
-  border-radius: 99px;
+  border-radius: var(--r-pill);
   background: currentColor;
-  box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 22%, transparent);
-  animation: pulse-soft 2.4s var(--ease) infinite;
-}
-
-@keyframes pulse-soft {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.35; }
 }
 
 /* ---------------------------------------------------------------- *
@@ -472,15 +495,14 @@ main {
 .position-card {
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  padding: 16px 18px;
-  border-radius: var(--r-3);
+  gap: var(--s-4);
+  padding: var(--s-5);
 }
 
 .position-form {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
-  gap: 13px;
+  gap: var(--s-3);
 }
 
 .field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
@@ -488,18 +510,18 @@ main {
   display: flex;
   align-items: baseline;
   gap: 6px;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.05em;
+  font-size: 10px;
+  font-weight: 640;
+  letter-spacing: 0.11em;
   text-transform: uppercase;
   color: var(--ink-3);
 }
-#pos-ticker { font-family: var(--font-mono); letter-spacing: 0.06em; text-transform: uppercase; }
+#pos-ticker { font-family: var(--font-mono); letter-spacing: 0.06em; text-transform: uppercase; font-weight: 600; }
 
 .req {
   font-size: 9px;
-  font-weight: 600;
-  letter-spacing: 0.05em;
+  font-weight: 640;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--accent);
 }
@@ -507,7 +529,7 @@ main {
 .checkbox.inline {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--s-2);
   min-height: 26px;
   font-size: 12px;
   color: var(--ink-2);
@@ -516,12 +538,10 @@ main {
 
 .table-wrap {
   position: relative;
-  border: 1px solid var(--edge);
+  border: 1px solid var(--line);
   border-radius: var(--r-3);
-  background: var(--glass);
-  box-shadow: var(--lift-1);
-  backdrop-filter: blur(var(--blur)) saturate(var(--sat));
-  -webkit-backdrop-filter: blur(var(--blur)) saturate(var(--sat));
+  background: var(--surface-1);
+  box-shadow: var(--e-1);
   overflow-x: auto;
 }
 
@@ -531,18 +551,18 @@ th {
   text-align: left;
   padding: 10px 14px;
   font-size: 9.5px;
-  font-weight: 650;
-  letter-spacing: 0.1em;
+  font-weight: 640;
+  letter-spacing: 0.11em;
   text-transform: uppercase;
   color: var(--ink-3);
-  background: color-mix(in srgb, var(--glass-2) 70%, transparent);
-  border-bottom: 1px solid var(--edge);
+  background: var(--well);
+  border-bottom: 1px solid var(--line);
   white-space: nowrap;
 }
 
 td {
-  padding: 10px 14px;
-  border-bottom: 1px solid var(--edge);
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--line);
   font-family: var(--font-mono);
   font-size: 11.5px;
   font-variant-numeric: tabular-nums;
@@ -550,11 +570,11 @@ td {
   white-space: nowrap;
 }
 tbody tr:last-child td { border-bottom: 0; }
-tbody tr:hover td { background: color-mix(in srgb, var(--glass-2) 55%, transparent); }
+tbody tr:hover td { background: var(--surface-2); }
 
 /* The ticker is the row's identity, so it reads at full strength and with the
    tracking every other symbol in the product gets. */
-td:first-child { font-weight: 650; letter-spacing: 0.055em; color: var(--ink); }
+td:first-child { font-weight: 640; letter-spacing: 0.055em; color: var(--ink); }
 
 /* Shares, cost and the two targets are quantities meant to be compared down
    the column, so they are set flush right where their digits line up. The
@@ -576,39 +596,30 @@ td button {
   transition: color var(--fast) var(--ease), background var(--fast) var(--ease),
     border-color var(--fast) var(--ease);
 }
-td button:hover {
-  color: var(--down);
-  border-color: color-mix(in srgb, var(--down) 45%, transparent);
-  background: color-mix(in srgb, var(--down) 12%, transparent);
-}
+td button:hover { color: var(--down); border-color: var(--down-line); background: var(--down-soft); }
 
 /* ---------------------------------------------------------------- *
  * Site access rows
  * ---------------------------------------------------------------- */
 
-.rows {
-  display: flex;
-  flex-direction: column;
-  border-radius: var(--r-3);
-  overflow: hidden;
-}
-.rows > .hint { padding: 20px 18px; font-size: 12px; color: var(--ink-3); margin: 0; }
+.rows { display: flex; flex-direction: column; overflow: hidden; }
+.rows > .hint { padding: var(--s-6) var(--s-5); font-size: 12px; color: var(--ink-3); margin: 0; }
 
 .row-item {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 14px;
-  padding: 13px 18px;
+  gap: var(--s-4);
+  padding: var(--s-4) var(--s-5);
   transition: background var(--fast) var(--ease);
 }
-.row-item + .row-item { border-top: 1px solid var(--edge); }
-.row-item:hover { background: color-mix(in srgb, var(--glass-2) 55%, transparent); }
+.row-item + .row-item { border-top: 1px solid var(--line); }
+.row-item:hover { background: var(--surface-2); }
 .row-item strong {
   font-family: var(--font-mono);
   font-size: 12px;
   font-weight: 600;
-  letter-spacing: 0.01em;
+  letter-spacing: -0.01em;
   color: var(--ink);
 }
 .row-item .hint {
@@ -616,16 +627,15 @@ td button:hover {
   margin-top: 3px;
   font-family: var(--font-mono);
   font-size: 10.5px;
-  letter-spacing: 0.05em;
-  color: var(--ink-3);
+  letter-spacing: 0.04em;
+  color: var(--ink-4);
 }
 
 /* ---------------------------------------------------------------- *
  * Registry and repair log
  *
- * Both were monospace dumps of one long line each. They are records, so they
- * are set as records: the thing that changed in reading weight, the detail
- * beneath it, the outcome as a chip on the right.
+ * Both are records, so they are set as records: the thing that changed in
+ * reading weight, the detail beneath it, the outcome as a chip on the right.
  * ---------------------------------------------------------------- */
 
 .entries {
@@ -634,7 +644,6 @@ td button:hover {
   padding: 0;
   display: flex;
   flex-direction: column;
-  border-radius: var(--r-3);
   overflow: hidden;
 }
 
@@ -644,12 +653,12 @@ td button:hover {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  gap: 16px;
-  padding: 12px 18px;
+  gap: var(--s-4);
+  padding: var(--s-3) var(--s-5);
   transition: background var(--fast) var(--ease);
 }
-.entry + .entry { border-top: 1px solid var(--edge); }
-.entry:hover { background: color-mix(in srgb, var(--glass-2) 55%, transparent); }
+.entry + .entry { border-top: 1px solid var(--line); }
+.entry:hover { background: var(--surface-2); }
 
 .entry-main { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
 
@@ -657,7 +666,7 @@ td button:hover {
   font-family: var(--font-mono);
   font-size: 11.5px;
   font-weight: 600;
-  letter-spacing: 0.01em;
+  letter-spacing: -0.01em;
   color: var(--ink);
 }
 .entry-title .field-name { color: var(--accent); }
@@ -669,34 +678,27 @@ td button:hover {
   overflow-wrap: anywhere;
 }
 
-.entry-meta { flex: none; display: flex; align-items: center; gap: 10px; font-size: 11px; color: var(--ink-3); }
+.entry-meta { flex: none; display: flex; align-items: center; gap: var(--s-3); font-size: 11px; color: var(--ink-4); }
 
 .pill {
   font-size: 9.5px;
   font-weight: 700;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.07em;
   text-transform: uppercase;
   padding: 3px 9px;
-  border-radius: 99px;
-  border: 1px solid var(--edge-2);
-  background: var(--glass-2);
+  border-radius: var(--r-pill);
+  border: 1px solid var(--line-2);
+  background: var(--surface-2);
+  color: var(--ink-2);
   white-space: nowrap;
 }
-.pill.ok {
-  color: var(--up);
-  border-color: color-mix(in srgb, var(--up) 42%, transparent);
-  background: color-mix(in srgb, var(--up) 11%, transparent);
-}
-.pill.bad {
-  color: var(--down);
-  border-color: color-mix(in srgb, var(--down) 42%, transparent);
-  background: color-mix(in srgb, var(--down) 11%, transparent);
-}
+.pill.ok { color: var(--up); border-color: var(--up-line); background: var(--up-soft); }
+.pill.bad { color: var(--down); border-color: var(--down-line); background: var(--down-soft); }
 
 /* The one place a list says nothing is here. Kept inside the list so the pane
    itself is what holds the message, rather than a stray box beside it. */
 .empty-note {
-  padding: 26px 18px;
+  padding: var(--s-7) var(--s-5);
   text-align: center;
   font-size: 12px;
   line-height: 1.6;
@@ -714,14 +716,15 @@ td button:hover {
  * ---------------------------------------------------------------- */
 
 @media (max-width: 900px) {
-  .shell { grid-template-columns: 1fr; gap: 14px; padding: 14px 14px 30px; }
+  .shell { grid-template-columns: 1fr; }
 
-  .sidebar-inner { position: static; height: auto; gap: 14px; padding: 14px; }
+  .sidebar { border-right: 0; border-bottom: 1px solid var(--line); }
+  .sidebar-inner { position: static; height: auto; gap: var(--s-4); padding: var(--s-4); }
   .sidebar-foot { display: none; }
 
   /* The rail becomes a scrolling tab strip rather than a stacked list, so the
      active marker moves from the leading edge to the underside. */
-  .nav { flex-direction: row; overflow-x: auto; gap: 5px; padding-bottom: 2px; }
+  .nav { flex-direction: row; overflow-x: auto; gap: 4px; padding-bottom: 2px; }
   .nav-link { white-space: nowrap; grid-template-columns: 18px auto; padding: 8px 12px; }
   .nav-link::before {
     left: 12px;
@@ -737,10 +740,14 @@ td button:hover {
   .nav-icon { width: 18px; height: 18px; }
   .nav-icon svg { width: 16px; height: 16px; }
 
-  .page-head { position: static; padding: 13px 15px; }
+  .page-head { position: static; padding: var(--s-4) var(--s-5); }
+  .panel { padding: var(--s-5) var(--s-5) var(--s-7); }
 
-  .setting { grid-template-columns: 1fr; gap: 11px; }
+  .setting { grid-template-columns: 1fr; gap: var(--s-3); }
   .setting-control { align-items: stretch; }
   .setting-control:has(> .toggle) { align-items: flex-start; }
   .setting-control > .btn { align-self: flex-start; }
+
+  .checklist li { grid-template-columns: 18px 1fr; }
+  .check-value { grid-column: 2; text-align: left; }
 }

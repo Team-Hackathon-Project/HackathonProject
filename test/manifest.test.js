@@ -59,7 +59,7 @@ test('icons are real PNG files at the declared sizes', () => {
 test('no page inlines a script or a style, which the CSP would block', () => {
   // web/index.html is held to the same rule: inside the extension it is served
   // under the same CSP as every other page.
-  for (const page of ['src/popup.html', 'src/options.html', 'src/offscreen.html', 'web/index.html']) {
+  for (const page of ['src/popup.html', 'src/options.html', 'src/welcome.html', 'src/offscreen.html', 'web/index.html']) {
     const html = readSource(page);
     assert.doesNotMatch(html, /<script(?![^>]*\bsrc=)/, `${page} has an inline <script>`);
     assert.doesNotMatch(html, /\son\w+\s*=/, `${page} has an inline event handler`);
@@ -67,7 +67,7 @@ test('no page inlines a script or a style, which the CSP would block', () => {
 });
 
 test('scraped values are never written into the DOM as HTML', () => {
-  for (const file of ['src/popup.js', 'src/options.js', 'web/js/render.js', 'web/js/main.js']) {
+  for (const file of ['src/popup.js', 'src/options.js', 'src/welcome.js', 'web/js/render.js', 'web/js/main.js']) {
     const source = readSource(file);
     assert.doesNotMatch(source, /\.innerHTML\s*=/, `${file} assigns innerHTML`);
     assert.doesNotMatch(source, /insertAdjacentHTML/, `${file} uses insertAdjacentHTML`);

@@ -1,0 +1,280 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Market Advisory Engine — Setup</title>
+    <link rel="stylesheet" href="theme.css" />
+    <link rel="stylesheet" href="welcome.css" />
+  </head>
+  <body class="welcome">
+    <div class="grain" aria-hidden="true"></div>
+
+    <div class="split">
+      <!--
+        The rail states where you are and how much is left, and never moves.
+        Everything that changes lives on the right, which is what stops a
+        five-step flow from feeling like five unrelated screens.
+      -->
+      <aside class="rail-side">
+        <div class="rail-mesh" aria-hidden="true"></div>
+        <div class="rail-body">
+          <div class="brand">
+            <span class="mark" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+                <path class="ring" d="M16.82 5.12A8.4 8.4 0 1 0 20.27 13.46" />
+                <path d="M7.2 14.4 10.3 11.3l2.9 2.1 3.4-4.3" />
+              </svg>
+            </span>
+            <div class="brand-text">
+              <span class="brand-name">Market Advisory</span>
+              <span class="rail-sub">Setup</span>
+            </div>
+          </div>
+
+          <div class="rail-progress">
+            <div class="meter" aria-hidden="true"><div id="progress-fill" class="meter-fill"></div></div>
+            <p id="progress-text" class="rail-count" role="status" aria-live="polite">Step 1 of 5</p>
+          </div>
+
+          <ol class="rail-steps" id="rail-steps">
+            <li data-step="0"><span class="tick" aria-hidden="true"></span><span class="rail-step-text"><b>Welcome</b><span>What this thing is</span></span></li>
+            <li data-step="1"><span class="tick" aria-hidden="true"></span><span class="rail-step-text"><b>How it works</b><span>Scan, read, decide</span></span></li>
+            <li data-step="2"><span class="tick" aria-hidden="true"></span><span class="rail-step-text"><b>Choose an engine</b><span>Local rules or a model</span></span></li>
+            <li data-step="3"><span class="tick" aria-hidden="true"></span><span class="rail-step-text"><b>Track something</b><span>Your first ticker</span></span></li>
+            <li data-step="4"><span class="tick" aria-hidden="true"></span><span class="rail-step-text"><b>Ready</b><span>Where to go next</span></span></li>
+          </ol>
+
+          <p class="rail-foot">
+            Everything you enter here is stored in <code>chrome.storage.local</code> on this machine.
+            Nothing is synced, and no order is ever placed.
+          </p>
+        </div>
+      </aside>
+
+      <main class="stage">
+        <header class="stage-top">
+          <p class="eyebrow" id="stage-eyebrow">Getting started</p>
+          <button id="skip-all" class="btn ghost small" type="button">Skip setup</button>
+        </header>
+
+        <!-- ---------------------------------------------------------- -->
+        <section class="step is-active" data-step="0" aria-label="Welcome">
+          <div class="step-head">
+            <h1>Market data that<br />repairs itself.</h1>
+            <p class="lede">
+              Open a quote page, press one button, and get a reading you can act on — a call, the confidence
+              behind it, and the reasoning in plain language. When the page rewrites its markup, the agent
+              rewrites its selectors and carries on.
+            </p>
+          </div>
+
+          <ul class="pillars">
+            <li>
+              <span class="pillar-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="11" cy="11" r="7" /><path d="m20 20-3.6-3.6" />
+                </svg>
+              </span>
+              <div>
+                <b>Reads the tab you are on</b>
+                <p>No account, no data feed, no per-site integration. Whatever quote page you are looking at is the source.</p>
+              </div>
+            </li>
+            <li>
+              <span class="pillar-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M3.5 12a8.5 8.5 0 1 0 2.6-6.1" /><path d="M3.5 4.5V10H9" /><path d="M12 8.5V12l2.5 1.8" />
+                </svg>
+              </span>
+              <div>
+                <b>Fixes itself when a site changes</b>
+                <p>A broken selector is captured, sent to a model with the surrounding markup, and replaced — mid-scan, without you noticing.</p>
+              </div>
+            </li>
+            <li>
+              <span class="pillar-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M12 3 4.5 6v6c0 4.4 3.1 8.1 7.5 9 4.4-.9 7.5-4.6 7.5-9V6z" /><path d="m8.8 12 2.2 2.2 4.2-4.4" />
+                </svg>
+              </span>
+              <div>
+                <b>You place every order yourself</b>
+                <p>The extension proposes and records. It is not connected to a broker and has no way to transact.</p>
+              </div>
+            </li>
+          </ul>
+        </section>
+
+        <!-- ---------------------------------------------------------- -->
+        <section class="step" data-step="1" aria-label="How it works" hidden>
+          <div class="step-head">
+            <h1>Three moves,<br />in this order.</h1>
+            <p class="lede">The whole product is one loop. It takes about four seconds and it ends with you.</p>
+          </div>
+
+          <ol class="loop">
+            <li>
+              <span class="loop-n">01</span>
+              <div>
+                <b>Scan</b>
+                <p>The content script reads the ticker, price, daily change, volume and any headlines out of the live DOM, then strips the page bloat and stores structured JSON.</p>
+              </div>
+            </li>
+            <li>
+              <span class="loop-n">02</span>
+              <div>
+                <b>Read</b>
+                <p>One call — <em>buy</em>, <em>sell</em> or <em>hold</em> — with a confidence reading and a paragraph saying what drove it. Your own targets and cost basis are part of the input.</p>
+              </div>
+            </li>
+            <li>
+              <span class="loop-n">03</span>
+              <div>
+                <b>Decide</b>
+                <p>Approve, reject, or override with your own call and a note. Every decision is written to local storage, and nothing leaves this machine.</p>
+              </div>
+            </li>
+          </ol>
+
+          <div class="aside-note pane">
+            <b>What happens when a site changes its markup</b>
+            <p>
+              The lookup fails, the agent captures the parent container, asks the model for a selector that
+              finds the live value, validates the answer against the page, and adopts it. The repair is
+              logged, shown in the popup, and reused on every later scan of that host.
+            </p>
+          </div>
+        </section>
+
+        <!-- ---------------------------------------------------------- -->
+        <section class="step" data-step="2" aria-label="Choose an engine" hidden>
+          <div class="step-head">
+            <h1>Pick what<br />answers.</h1>
+            <p class="lede">Both options scan and both give you a verdict. The difference is whether a model can rewrite broken selectors and write the rationale.</p>
+          </div>
+
+          <div class="choices" role="radiogroup" aria-label="Advisory engine">
+            <button id="engine-local" class="choice" type="button" role="radio" aria-checked="false">
+              <span class="choice-mark" aria-hidden="true"></span>
+              <span class="choice-body">
+                <b>Local rules</b>
+                <span>No key, no network call, no cost. Verdicts come from your targets and the price history the extension has collected. Selector repair is off.</span>
+              </span>
+            </button>
+            <button id="engine-model" class="choice" type="button" role="radio" aria-checked="false">
+              <span class="choice-mark" aria-hidden="true"></span>
+              <span class="choice-body">
+                <b>Model-powered <span class="tag">recommended</span></b>
+                <span>Adds self-healing selectors and a written rationale. Needs an API key from Anthropic or Groq, kept on this machine and sent only to that provider.</span>
+              </span>
+            </button>
+          </div>
+
+          <div id="key-panel" class="key-panel pane hidden">
+            <div class="field-row">
+              <div class="field">
+                <label for="w-provider">Provider</label>
+                <select id="w-provider"></select>
+              </div>
+              <div class="field grow">
+                <label for="w-key"><span id="w-key-label">API key</span> <span id="w-key-length" class="field-note"></span></label>
+                <input id="w-key" type="password" autocomplete="off" spellcheck="false" />
+              </div>
+            </div>
+            <div class="field-row">
+              <div class="field grow">
+                <label for="w-model">Model</label>
+                <input id="w-model" type="text" list="w-model-list" autocomplete="off" spellcheck="false" />
+                <datalist id="w-model-list"></datalist>
+              </div>
+              <div class="field field-action">
+                <button id="w-test" class="btn small" type="button">Test connection</button>
+              </div>
+            </div>
+            <p class="field-hint">
+              No key yet? <a id="w-key-link" href="#" target="_blank" rel="noreferrer noopener">Get one here</a>.
+              You can add it later from Settings and everything keeps working on the local rules until you do.
+            </p>
+          </div>
+
+          <p id="engine-status" class="status" role="status" aria-live="polite"></p>
+        </section>
+
+        <!-- ---------------------------------------------------------- -->
+        <section class="step" data-step="3" aria-label="Track something" hidden>
+          <div class="step-head">
+            <h1>Watch your<br />first ticker.</h1>
+            <p class="lede">Targets are what turn a quote into a signal. Only the symbol is required — you can fill the rest in later, or let the extension suggest them once it has some history.</p>
+          </div>
+
+          <div class="track-card pane">
+            <div class="field-row">
+              <div class="field">
+                <label for="w-ticker">Ticker</label>
+                <input id="w-ticker" type="text" placeholder="AAPL" maxlength="10" autocomplete="off" spellcheck="false" />
+              </div>
+              <div class="field">
+                <label for="w-buy">Buy below</label>
+                <input id="w-buy" type="number" placeholder="0.00" step="any" min="0" />
+              </div>
+              <div class="field">
+                <label for="w-sell">Sell above</label>
+                <input id="w-sell" type="number" placeholder="0.00" step="any" min="0" />
+              </div>
+              <div class="field field-action">
+                <button id="w-add" class="btn primary small" type="button">Add</button>
+              </div>
+            </div>
+            <ul id="w-watchlist" class="tag-list" aria-label="Tickers added"></ul>
+            <p id="track-status" class="status" role="status" aria-live="polite"></p>
+          </div>
+
+          <div class="switch-row pane">
+            <div class="switch-text">
+              <b>Check prices in the background</b>
+              <p>The extension re-reads each watched ticker on a timer, even with every tab closed, and notifies you when a target is crossed. Off until you ask for it.</p>
+            </div>
+            <label class="toggle" for="w-monitor">
+              <input id="w-monitor" type="checkbox" />
+              <span class="toggle-track" aria-hidden="true"></span>
+              <span class="visually-hidden">Check prices in the background</span>
+            </label>
+          </div>
+        </section>
+
+        <!-- ---------------------------------------------------------- -->
+        <section class="step" data-step="4" aria-label="Ready" hidden>
+          <div class="step-head">
+            <h1>You are<br />set up.</h1>
+            <p class="lede">Here is where everything ended up. Any of it can be changed later from Settings.</p>
+          </div>
+
+          <ul id="recap" class="recap"></ul>
+
+          <div class="launch">
+            <button id="open-dashboard" class="btn primary large" type="button">Open the dashboard</button>
+            <button id="open-settings" class="btn large" type="button">Open settings</button>
+          </div>
+
+          <div class="aside-note pane">
+            <b>One thing worth doing now</b>
+            <p>
+              Pin the extension to the toolbar — click the puzzle-piece icon in Chrome and press the pin next
+              to <em>Market Advisory Engine</em>. The whole product starts with that button, so it is worth
+              one click to keep it visible.
+            </p>
+          </div>
+        </section>
+
+        <footer class="stage-foot">
+          <button id="back" class="btn ghost" type="button">Back</button>
+          <div class="dots" id="dots" aria-hidden="true"></div>
+          <button id="next" class="btn primary" type="button">Get started</button>
+        </footer>
+      </main>
+    </div>
+
+    <script type="module" src="welcome.js"></script>
+  </body>
+</html>

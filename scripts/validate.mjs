@@ -194,7 +194,7 @@ export function validate() {
   // The dashboard is held to the same rule: it is served both from inside the
   // extension and as a plain static folder, and neither has a build step to
   // resolve a bare specifier for it.
-  for (const entry of ['src/background.js', 'src/popup.js', 'src/options.js', 'src/offscreen.js', 'web/js/main.js']) {
+  for (const entry of ['src/background.js', 'src/popup.js', 'src/options.js', 'src/welcome.js', 'src/offscreen.js', 'web/js/main.js']) {
     checkModuleGraph(entry, problems);
   }
 
@@ -205,7 +205,7 @@ export function validate() {
   }
 
   // HTML pages must only reference files that exist.
-  for (const page of ['src/popup.html', 'src/options.html', 'src/offscreen.html', 'web/index.html']) {
+  for (const page of ['src/popup.html', 'src/options.html', 'src/welcome.html', 'src/offscreen.html', 'web/index.html']) {
     if (!exists(page)) {
       problems.push(`missing page: ${page}`);
       continue;

@@ -13,7 +13,7 @@ import {
   MSG, OFFSCREEN_TARGET, OFFSCREEN_PATH, FIELDS, SNIPPET_LIMIT, FIELD_LABELS, FIELD_PHRASES, HEALABLE_FIELDS,
   EXTERNAL_ALLOWED, REFRESH_FETCH_TIMEOUT_MS, REFRESH_TAB_TIMEOUT_MS, REFRESH_GAP_MS,
   REFRESH_BRIDGE_TIMEOUT_MS, BRIDGE_PROBE_TIMEOUT_MS, BRIGHTDATA_MODES,
-  MONITOR_ALARM, MIN_MONITOR_MINUTES, MAX_MONITOR_MINUTES, DASHBOARD_PATH,
+  MONITOR_ALARM, MIN_MONITOR_MINUTES, MAX_MONITOR_MINUTES, DASHBOARD_PATH, WELCOME_PATH,
 } from './lib/constants.js';
 import { normalizeBridgeUrl, bridgeRoutes, bridgeOriginPattern, BRIDGE_PROTOCOL } from './lib/brightdata.js';
 import { candidatesFor, isPlausibleSelector } from './lib/selectors.js';
@@ -1516,7 +1516,24 @@ chrome.alarms.onAlarm.addListener((alarm) => {
 
 // A browser restart or an update clears alarms; re-arm from what was stored.
 chrome.runtime.onStartup.addListener(() => { syncMonitorAlarm(); });
-chrome.runtime.onInstalled.addListener(() => { syncMonitorAlarm(); refreshBadge(); });
+/**
+ * A fresh install opens the setup guide once.
+ *
+ * Only on `install` — an update or a browser reload must not reopen it, and a
+ * user who has already walked it (or skipped it) never sees it again, because
+ * the guide itself sets `onboardingCompleted`. The tab is opened best-effort:
+ * a failure here must not take the rest of the install listener down with it.
+ */
+chrome.runtime.onInstalled.addListener((details) => {
+  syncMonitorAlarm();
+  refreshBadge();
+  if (!details || details.reason !== 'install') return;
+  (async () => {
+    const stored = await getSettings();
+    if (stored.onboardingCompleted) return;
+    await chrome.tabs.create({ url: chrome.runtime.getURL(WELCOME_PATH) });
+  })().catch((error) => console.warn('[market-scraper] could not open the setup guide:', error));
+});
 
 /**
  * Clicking a notification opens the dashboard at that ticker and marks the

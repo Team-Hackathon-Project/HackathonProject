@@ -9,7 +9,7 @@
  * confirmation modal, and the extension records the decision locally. No order
  * is ever transmitted anywhere.
  */
-import { MSG } from './lib/constants.js';
+import { MSG, WELCOME_PATH } from './lib/constants.js';
 import { formatCompact } from './lib/advisor.js';
 
 const el = (id) => document.getElementById(id);
@@ -19,9 +19,11 @@ const ui = {
   status: el('status'),
   context: el('context-line'),
   options: el('options-btn'),
+  guide: el('guide-btn'),
   empty: el('empty-state'),
   setupCard: el('setup-card'),
   setupBtn: el('setup-btn'),
+  setupGuide: el('setup-guide-btn'),
   snapshotCard: el('snapshot-card'),
   ticker: el('snapshot-title'),
   price: el('snapshot-price'),
@@ -116,9 +118,14 @@ function li(text) {
 
 function renderSnapshot(snapshot) {
   ui.ticker.textContent = snapshot.ticker || 'Unknown';
-  ui.price.textContent = Number.isFinite(snapshot.current_price)
+  const priced = Number.isFinite(snapshot.current_price);
+  ui.price.textContent = priced
     ? snapshot.current_price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })
     : '—';
+  // An em dash set at 40px is a white slab, which reads as a rendering fault
+  // rather than as "this page carried no price". The absent case gets its own
+  // size and weight.
+  ui.priceRow.classList.toggle('is-absent', !priced);
   ui.currency.textContent = snapshot.currency || '';
 
   // A freshly read price lands rather than appears. Removing the class,
@@ -312,9 +319,27 @@ async function runScrape() {
 
 ui.scrape.addEventListener('click', runScrape);
 
+/**
+ * Opens the setup guide in a full tab.
+ *
+ * The popup is 400px wide and closes the moment focus leaves it, which is the
+ * wrong place to walk someone through a first run. `chrome.tabs` is guarded
+ * because the popup is also driven headlessly in the tests, where the tabs API
+ * is not part of the double.
+ */
+function openGuide() {
+  const url = chrome.runtime.getURL ? chrome.runtime.getURL(WELCOME_PATH) : WELCOME_PATH;
+  if (chrome.tabs && chrome.tabs.create) chrome.tabs.create({ url });
+  else window.open(url, '_blank');
+}
+
+ui.guide.addEventListener('click', openGuide);
+
 ui.options.addEventListener('click', () => chrome.runtime.openOptionsPage());
 
 ui.setupBtn.addEventListener('click', () => chrome.runtime.openOptionsPage());
+
+ui.setupGuide.addEventListener('click', openGuide);
 
 ui.approve.addEventListener('click', () => {
   if (!currentAdvice) return;
@@ -392,6 +417,10 @@ document.addEventListener('keydown', (event) => {
     // A missing key is a thing to *do*, not a thing to read, so it gets a card
     // with a button rather than a line of grey text above the fold.
     show(ui.setupCard, !state.hasApiKey);
+    // Someone who has never been through the guide gets a dot on the button
+    // that opens it, and nobody else does.
+    const settings = state.settings || {};
+    ui.guide.classList.toggle('is-new', !settings.onboardingCompleted);
   } catch (error) {
     setStatus(error.message, true);
   }

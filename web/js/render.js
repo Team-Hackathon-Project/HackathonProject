@@ -184,12 +184,18 @@ export function summaryBar({ rows, lastLoadedAt }) {
     pnlKnown = true;
   }
 
-  return el('div.summary.pane',
-    stat('Watching', String(rows.length)),
-    stat('Priced', `${priced.length}`),
-    stat('Up / down', `${up} / ${down}`, up === down ? 'flat' : (up > down ? 'up' : 'down')),
-    held ? stat('Open P/L', formatMoney(pnl, currencyOf(rows)), directionOf(pnlKnown ? pnl : null)) : null,
-    stat('Updated', relativeTime(lastLoadedAt)));
+  // The strip is the page's hero: it is the only region carrying the ruled
+  // texture, and the figures in it are set larger than anything else on the
+  // dashboard. A watchlist is a set of readings off one instrument, so they sit
+  // in one pane divided by hairlines rather than in five separate tiles.
+  return el('section.hero.pane',
+    el('div.hero-mesh', { 'aria-hidden': 'true' }),
+    el('div.summary',
+      stat('Watching', String(rows.length)),
+      stat('Priced', `${priced.length}`),
+      stat('Up / down', `${up} / ${down}`, up === down ? 'flat' : (up > down ? 'up' : 'down')),
+      held ? stat('Open P/L', formatMoney(pnl, currencyOf(rows)), directionOf(pnlKnown ? pnl : null)) : null,
+      stat('Updated', relativeTime(lastLoadedAt))));
 }
 
 function stat(label, value, tone = null) {
@@ -414,11 +420,28 @@ export function disconnectedState({ canConnect, onConnect }) {
     canConnect ? el('div.row.center', el('button.btn.primary.small', { type: 'button', text: 'Enter the ID manually', onClick: onConnect })) : null);
 }
 
+/**
+ * The first thing a new user sees on this page.
+ *
+ * An empty grid explains nothing, so this is the onboarding step the dashboard
+ * owns: the three moves that fill it, numbered, with the shorter of the two
+ * routes stated last. It is the same loop the popup and the setup guide teach,
+ * worded for the surface it is on.
+ */
 export function emptyState() {
-  return el('div.empty',
+  const step = (n, title, body) => el('li.start-step',
+    el('span.start-n', { text: n }),
+    el('div',
+      el('b', { text: title }),
+      el('p.muted', { text: body })));
+
+  return el('div.empty.empty-start',
     el('h2', { text: 'Nothing on the watchlist yet' }),
-    el('p.muted', { text: 'Open a stock quote page, click the extension’s toolbar icon, and press Scan this tab. Whatever you scan lands here.' }),
-    el('p.muted', { text: 'Or add a ticker above and the dashboard will look it up on stockanalysis.com.' }));
+    el('p.muted.empty-lede', { text: 'Two ways to fill this page. Either works, and neither needs an account.' }),
+    el('ol.start-steps',
+      step('1', 'Open a quote page', 'Any stock page on any site — the extension reads whatever is on screen rather than a fixed data feed.'),
+      step('2', 'Press Scan this tab', 'Click the toolbar icon and scan. The ticker, its price and its history land here automatically.'),
+      step('3', 'Or add a symbol above', 'Type a ticker into the box at the top and the dashboard looks it up on stockanalysis.com by itself.')));
 }
 
 /* ------------------------------------------------------------------ *

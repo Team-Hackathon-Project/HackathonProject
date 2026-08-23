@@ -30,6 +30,20 @@ loads the folder inside. Open a quote page (Yahoo Finance, Google Finance,
 MarketWatch, stockanalysis.com, or anything else), click the toolbar icon, and
 press **Scan this tab**.
 
+### The setup guide
+
+A fresh install opens `src/welcome.html` in a tab once: five steps covering what
+the extension is, the scan/read/decide loop, whether a model or the local rules
+engine answers, your first watched ticker, and where to go next. Nothing in it
+is mandatory and every step can be skipped — it writes only what you actually
+fill in, and each step persists as you leave it, so a guide abandoned halfway
+still leaves a working configuration behind.
+
+It never reopens by itself. Reach it again from the **?** button in the popup,
+or from **Settings → Getting started**, which also shows a live checklist of
+what is configured — read back out of storage rather than out of what some
+earlier screen intended to write.
+
 Optionally open the extension's options page and paste an API key. Two
 providers ship: **Anthropic (Claude)** by default, and **Groq** for when an
 Anthropic key is not available — Groq's free tier runs the whole loop. Pick one
@@ -47,9 +61,10 @@ src/
   background.js            Service worker: injection, healing loop, LLM calls, router
   content.js               Injected extractor (classic script — no ES imports)
   offscreen.html/.js       DOM parser for sanitizing scraped HTML off the active tab
-  theme.css                Design tokens and shared primitives for both pages
-  popup.html/.css/.js      Dashboard: quote card, advisory card, approve/reject/override
-  options.html/.css/.js    API key, model, portfolio targets, healed-selector registry
+  theme.css                The design system: tokens, material, type, controls — every surface
+  popup.html/.css/.js      Popup: quote card, advisory card, approve/reject/override
+  options.html/.css/.js    Getting started, API key, model, portfolio targets, selector registry
+  welcome.html/.css/.js    The five-step setup guide, opened once on install
   icons/                   Generated PNGs (scripts/make-icons.mjs)
   lib/
     constants.js           Message types, storage keys, defaults
@@ -100,7 +115,7 @@ e2e/
 docs/
   DEMO.md                  Three-minute demo script, with real screenshots
   env.mjs                  Reads the gitignored .env the runs take keys from
-test/                      428 tests: node:test + jsdom
+test/                      446 tests: node:test + jsdom
 ```
 
 ## The dashboard

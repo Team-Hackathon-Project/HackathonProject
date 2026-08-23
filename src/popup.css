@@ -4,16 +4,16 @@
  * The popup is 400x600 at most, so the layout is a single column with a fixed
  * header and one scrolling body. Four ideas carry the design:
  *
- *  - The panel is glass over a lit field. The header, the cards and the modal
- *    are translucent panes with a lit rim; the light behind them drifts, and
- *    comes from `theme.css`. That is what gives a 400px column any depth.
- *  - The verdict is felt before it is read. When an advisory lands, the light
- *    behind the glass changes hue and every pane picks it up. You register
- *    "this is a sell" peripherally, then read the word.
- *  - The verdict is one object, not two. The call and the confidence in it are
- *    drawn as a single lens: a ring gauge that sweeps to its reading with the
- *    word inside it. A word and a separate progress bar are two things to
- *    reconcile; this is one.
+ *  - It is a panel of solid sheets, not glass. Everything is a real value step
+ *    off the canvas with one hairline and one shadow, which is what keeps a
+ *    400px column legible at a glance instead of soft.
+ *  - The verdict is felt before it is read. When an advisory lands, a wash of
+ *    its hue appears behind the top of the panel. You register "this is a sell"
+ *    peripherally, then read the word.
+ *  - The verdict is one object. The call is set large and the confidence in it
+ *    is drawn immediately beneath on the product's own meter — the same
+ *    instrument the target band and the onboarding progress use — so the two
+ *    read as one statement rather than two things to reconcile.
  *  - The agent is visible while it works. The mark's ring turns and a hairline
  *    rail sweeps under the header, so the popup never looks frozen.
  */
@@ -29,8 +29,8 @@ body {
 /*
  * The verdict light.
  *
- * Sits above the ambient field and below the glass, so a call does not paint
- * the cards - it changes what they are lit by. Neutral until an advisory sets
+ * Sits above the ground and below the sheets, so a call does not paint the
+ * cards — it changes what they sit in. Neutral until an advisory sets
  * body[data-verdict].
  */
 .tone {
@@ -39,16 +39,14 @@ body {
   pointer-events: none;
   z-index: 0;
   opacity: 0;
-  transition: opacity var(--slow) var(--ease), background var(--slow) var(--ease);
-  background:
-    radial-gradient(130% 70% at 50% -12%, var(--tone-color, transparent) 0%, transparent 68%),
-    radial-gradient(60% 40% at 84% 46%, var(--tone-color, transparent) 0%, transparent 70%);
+  transition: opacity var(--slow) var(--ease);
+  background: radial-gradient(120% 46% at 50% 0%, var(--tone-color, transparent) 0%, transparent 72%);
 }
 body[data-verdict] .tone { opacity: 1; }
 
-body[data-verdict="BUY"] { --tone-color: color-mix(in srgb, var(--up) 22%, transparent); --tone-solid: var(--up); }
-body[data-verdict="SELL"] { --tone-color: color-mix(in srgb, var(--down) 22%, transparent); --tone-solid: var(--down); }
-body[data-verdict="HOLD"] { --tone-color: color-mix(in srgb, var(--hold) 16%, transparent); --tone-solid: var(--hold); }
+body[data-verdict="BUY"] { --tone-color: var(--up-soft); --tone-solid: var(--up); }
+body[data-verdict="SELL"] { --tone-color: var(--down-soft); --tone-solid: var(--down); }
+body[data-verdict="HOLD"] { --tone-color: var(--hold-soft); --tone-solid: var(--hold); }
 
 /* ---------------------------------------------------------------- *
  * Header
@@ -61,37 +59,23 @@ body[data-verdict="HOLD"] { --tone-color: color-mix(in srgb, var(--hold) 16%, tr
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
-  padding: 12px 16px;
-  background: color-mix(in srgb, var(--canvas) 60%, transparent);
-  backdrop-filter: saturate(var(--sat)) blur(26px);
-  -webkit-backdrop-filter: saturate(var(--sat)) blur(26px);
-  box-shadow: inset 0 1px 0 var(--spec), 0 10px 30px -22px rgba(0, 0, 0, 0.9);
+  gap: var(--s-3);
+  padding: var(--s-3) var(--s-4);
+  background: var(--canvas);
+  border-bottom: 1px solid var(--line);
 }
 
-/* The header's bottom edge is the instrument's scale: a ruled hairline rather
-   than a plain border. It is one of exactly two places this motif appears. */
-.topbar::after {
-  content: "";
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  height: 1px;
-  background-image: repeating-linear-gradient(90deg, var(--edge-2) 0 1px, transparent 1px 7px);
-  opacity: 0.5;
-}
+.topbar-actions { display: flex; align-items: center; gap: 2px; }
 
-.mark { width: 32px; height: 32px; border-radius: 10px; }
+.mark { width: 32px; height: 32px; border-radius: 9px; }
 .mark svg { width: 18px; height: 18px; }
 
-/* A ring of light that breathes out of the mark while the agent is working,
-   under the turning ring inside it. */
+/* A ring of light breathing out of the mark while the agent works. */
 .mark::after {
   content: "";
   position: absolute;
   inset: -1px;
-  border-radius: 11px;
+  border-radius: 10px;
   border: 1px solid var(--accent);
   opacity: 0;
 }
@@ -99,7 +83,7 @@ body[data-busy="1"] .mark::after { animation: pulse-ring 1.6s var(--ease) infini
 
 .brand-name { font-size: 13px; }
 
-/* The host being read is an identifier, so it is set as one - but only once
+/* The host being read is an identifier, so it is set as one — but only once
    there is a host. Until then this line is a sentence. */
 .sub {
   margin: 0;
@@ -110,13 +94,14 @@ body[data-busy="1"] .mark::after { animation: pulse-ring 1.6s var(--ease) infini
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 220px;
+  max-width: 190px;
 }
 
 .sub.is-host {
   font-family: var(--font-mono);
   font-size: 10px;
-  letter-spacing: 0.01em;
+  letter-spacing: -0.01em;
+  color: var(--ink-3);
 }
 
 /* Indeterminate activity rail: one hairline, no spinner, no layout shift. */
@@ -124,7 +109,7 @@ body[data-busy="1"] .mark::after { animation: pulse-ring 1.6s var(--ease) infini
   position: absolute;
   left: 0;
   right: 0;
-  bottom: 0;
+  bottom: -1px;
   height: 1px;
   overflow: hidden;
   opacity: 0;
@@ -133,12 +118,12 @@ body[data-busy="1"] .mark::after { animation: pulse-ring 1.6s var(--ease) infini
 }
 .rail span {
   display: block;
-  width: 40%;
+  width: 45%;
   height: 100%;
   background: linear-gradient(90deg, transparent, var(--accent), transparent);
 }
 body[data-busy="1"] .rail { opacity: 1; }
-body[data-busy="1"] .rail span { animation: sweep 1.25s var(--ease) infinite; }
+body[data-busy="1"] .rail span { animation: sweep 1.2s var(--ease) infinite; }
 
 /* ---------------------------------------------------------------- *
  * Body
@@ -147,47 +132,48 @@ body[data-busy="1"] .rail span { animation: sweep 1.25s var(--ease) infinite; }
 main {
   position: relative;
   z-index: 1;
-  padding: 14px 16px 20px;
+  padding: var(--s-4) var(--s-4) var(--s-6);
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--s-3);
 }
 
-.scan { display: flex; flex-direction: column; gap: 9px; }
+.scan { display: flex; flex-direction: column; gap: var(--s-3); }
 
-#scrape-btn { padding: 12px 14px; font-size: 13.5px; border-radius: var(--r-2); }
+#scrape-btn { font-size: 13.5px; letter-spacing: -0.012em; }
 
 /* The status line reads as an instrument readout: a state dot, then the text. */
-.statusline { display: flex; align-items: flex-start; gap: 8px; min-height: 17px; }
+.statusline { display: flex; align-items: flex-start; gap: var(--s-2); min-height: 17px; }
 
 .dot {
   width: 6px;
   height: 6px;
   flex: none;
   margin-top: 5px;
-  border-radius: 99px;
-  background: var(--ink-3);
+  border-radius: var(--r-pill);
+  background: var(--ink-4);
   transition: background var(--base) var(--ease);
 }
-body[data-busy="1"] .dot { background: var(--accent); animation: pulse-ring 1.4s var(--ease) infinite; }
-.statusline:has(.status.error) .dot { background: var(--down); animation: none; }
-/* No message, no indicator - but keep the space so nothing jumps. */
+body[data-busy="1"] .dot { background: var(--accent); }
+.statusline:has(.status.error) .dot { background: var(--down); }
+/* No message, no indicator — but keep the space so nothing jumps. */
 .statusline:has(.status:empty) .dot { visibility: hidden; }
 
 /* ---------------------------------------------------------------- *
- * Empty state - the popup teaches the loop in one glance.
+ * Empty state — the popup teaches the loop in one glance.
  * ---------------------------------------------------------------- */
 
-.empty { gap: 13px; }
+.empty { gap: var(--s-4); }
 
-.steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 11px; }
+.steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--s-3); }
 
 .steps li {
   display: grid;
   grid-template-columns: 22px 1fr;
-  gap: 11px;
+  gap: var(--s-3);
   align-items: start;
   font-size: 12px;
+  line-height: 1.55;
   color: var(--ink-2);
 }
 
@@ -196,50 +182,45 @@ body[data-busy="1"] .dot { background: var(--accent); animation: pulse-ring 1.4s
   color: var(--ink);
   font-weight: 600;
   font-size: 12.5px;
-  letter-spacing: -0.008em;
+  letter-spacing: -0.012em;
 }
 
-/* The step numbers are a real sequence - you scan, then read, then decide -
+/* The step numbers are a real sequence — you scan, then read, then decide —
    so they are numbered rather than bulleted. */
 .steps .n {
   display: grid;
   place-items: center;
   width: 22px;
   height: 22px;
-  border-radius: 8px;
-  border: 1px solid var(--edge);
+  border-radius: 7px;
+  border: 1px solid var(--line);
   background: var(--well);
-  box-shadow: inset 0 1px 0 var(--spec);
   font-family: var(--font-mono);
   font-size: 10px;
   font-weight: 600;
-  color: var(--accent);
+  color: var(--ink-2);
 }
 
 /* ---------------------------------------------------------------- *
  * Snapshot
  * ---------------------------------------------------------------- */
 
-.card-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.card-head { display: flex; align-items: center; justify-content: space-between; gap: var(--s-3); }
 
 .ticker {
-  font-size: 13px;
-  font-weight: 640;
+  font-size: 12px;
+  font-weight: 620;
   line-height: 1.2;
   color: var(--ink-2);
 }
 
 .price {
   position: relative;
-  margin: -2px 0 0;
+  margin: calc(var(--s-1) * -1) 0 0;
   display: flex;
   align-items: baseline;
-  gap: 8px;
-  font-family: var(--font-display);
-  font-size: 38px;
-  font-weight: 640;
-  letter-spacing: -0.04em;
-  line-height: 1.02;
+  gap: var(--s-2);
+  font-size: 40px;
 }
 .price .cur {
   font-family: var(--font-mono);
@@ -249,27 +230,19 @@ body[data-busy="1"] .dot { background: var(--accent); animation: pulse-ring 1.4s
   color: var(--ink-3);
 }
 
+/* No price on the page. Said quietly, at a size that cannot be mistaken for a
+   reading. */
+.price.is-absent { font-size: 22px; color: var(--ink-4); }
+
 /* A price that has just been read lands rather than appears: the figure comes
-   up from a whisker below with its own light behind it, once, for half a
-   second. It is the only thing on the surface that moves on new data, which is
-   what makes it legible as "this number is new". */
-.price.is-fresh { animation: price-land 620ms var(--spring) both; }
-.price.is-fresh::before {
-  content: "";
-  position: absolute;
-  inset: -12px -16px;
-  border-radius: var(--r-2);
-  background: radial-gradient(60% 100% at 20% 50%, rgba(var(--accent-rgb), 0.22), transparent 70%);
-  animation: fade-out 900ms var(--ease) both;
-  pointer-events: none;
-}
+   up from a whisker below, once. It is the only thing on the surface that
+   moves on new data, which is what makes it legible as "this number is new". */
+.price.is-fresh { animation: price-land 480ms var(--spring) both; }
 
 @keyframes price-land {
-  from { opacity: 0; transform: translateY(7px); letter-spacing: -0.055em; }
-  to { opacity: 1; transform: none; letter-spacing: -0.04em; }
+  from { opacity: 0; transform: translateY(6px); letter-spacing: -0.055em; }
+  to { opacity: 1; transform: none; letter-spacing: -0.042em; }
 }
-
-@keyframes fade-out { from { opacity: 1; } to { opacity: 0; } }
 
 /* The change reads as a signed quantity, with the direction carried by a
    caret so it survives being printed in greyscale or read colour-blind. */
@@ -278,8 +251,8 @@ body[data-busy="1"] .dot { background: var(--accent); animation: pulse-ring 1.4s
   align-items: center;
   gap: 5px;
   font-size: 12px;
-  font-weight: 620;
-  letter-spacing: -0.005em;
+  font-weight: 600;
+  letter-spacing: -0.01em;
   color: var(--ink-3);
   white-space: nowrap;
 }
@@ -289,23 +262,13 @@ body[data-busy="1"] .dot { background: var(--accent); animation: pulse-ring 1.4s
 .change.up,
 .change.down {
   padding: 4px 10px;
-  border-radius: 99px;
-  border: 1px solid var(--edge);
-  background: var(--glass-2);
-  box-shadow: var(--lift-1);
+  border-radius: var(--r-pill);
+  border: 1px solid var(--line);
 }
 .change.up::before,
 .change.down::before { content: ""; width: 0; height: 0; flex: none; }
-.change.up {
-  color: var(--up);
-  border-color: color-mix(in srgb, var(--up) 34%, transparent);
-  background: color-mix(in srgb, var(--up) 12%, transparent);
-}
-.change.down {
-  color: var(--down);
-  border-color: color-mix(in srgb, var(--down) 34%, transparent);
-  background: color-mix(in srgb, var(--down) 12%, transparent);
-}
+.change.up { color: var(--up); border-color: var(--up-line); background: var(--up-soft); }
+.change.down { color: var(--down); border-color: var(--down-line); background: var(--down-soft); }
 .change.up::before {
   border-left: 3.5px solid transparent;
   border-right: 3.5px solid transparent;
@@ -317,32 +280,32 @@ body[data-busy="1"] .dot { background: var(--accent); animation: pulse-ring 1.4s
   border-top: 5px solid currentColor;
 }
 
-/* Two wells cut into the card, divided by a hairline of light. */
+/* Two wells cut into the card, divided by a hairline. */
 .metrics {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  margin: 3px 0 0;
-  border: 1px solid var(--edge);
+  margin: var(--s-1) 0 0;
+  border: 1px solid var(--line);
   border-radius: var(--r-2);
   background: var(--well);
-  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.22);
   overflow: hidden;
 }
-.metrics > div { padding: 9px 12px; }
-.metrics > div + div { border-left: 1px solid var(--edge); }
+.metrics > div { padding: 10px 12px; }
+.metrics > div + div { border-left: 1px solid var(--line); }
 .metrics dt {
   font-size: 9.5px;
-  font-weight: 650;
+  font-weight: 640;
   text-transform: uppercase;
-  letter-spacing: 0.09em;
+  letter-spacing: 0.1em;
   color: var(--ink-3);
 }
 .metrics dd {
-  margin: 3px 0 0;
+  margin: 4px 0 0;
   font-family: var(--font-mono);
   font-size: 12.5px;
   font-weight: 600;
   letter-spacing: -0.02em;
+  color: var(--ink);
 }
 
 /* An automatic target change is the user's own numbers moving. It gets a
@@ -350,9 +313,9 @@ body[data-busy="1"] .dot { background: var(--accent); animation: pulse-ring 1.4s
 .note {
   margin: 0;
   font-size: 11px;
-  line-height: 1.45;
+  line-height: 1.5;
   color: var(--ink-2);
-  padding: 9px 11px;
+  padding: 10px 12px;
   border-radius: var(--r-1);
   background: var(--well);
   border-left: 2px solid var(--accent);
@@ -362,11 +325,11 @@ body[data-busy="1"] .dot { background: var(--accent); animation: pulse-ring 1.4s
   display: flex;
   flex-direction: column;
   gap: 2px;
-  border-top: 1px solid var(--edge);
-  padding-top: 8px;
+  border-top: 1px solid var(--line);
+  padding-top: var(--s-2);
 }
 .disclosures ul { margin: 6px 0 4px; padding-left: 16px; color: var(--ink-2); font-size: 11px; }
-.disclosures li { margin-bottom: 4px; word-break: break-word; }
+.disclosures li { margin-bottom: 4px; word-break: break-word; line-height: 1.5; }
 .disclosures .mono li { word-break: break-all; }
 
 /* ---------------------------------------------------------------- *
@@ -374,14 +337,15 @@ body[data-busy="1"] .dot { background: var(--accent); animation: pulse-ring 1.4s
  * ---------------------------------------------------------------- */
 
 .banner {
+  position: relative;
   border-radius: var(--r-2);
-  padding: 10px 12px 10px 13px;
+  padding: 11px 12px 11px 14px;
   font-size: 11.5px;
-  line-height: 1.45;
+  line-height: 1.5;
   overflow: hidden;
   animation: rise var(--base) var(--spring) both;
 }
-.banner::before {
+.banner::after {
   content: "";
   position: absolute;
   left: 0;
@@ -397,41 +361,40 @@ body[data-busy="1"] .dot { background: var(--accent); animation: pulse-ring 1.4s
 
 .banner-title {
   font-size: 10px;
-  font-weight: 650;
+  font-weight: 640;
   text-transform: uppercase;
-  letter-spacing: 0.09em;
+  letter-spacing: 0.1em;
   color: var(--ink-3);
 }
 
-.banner.heal { color: var(--ink); background: color-mix(in srgb, var(--accent) 10%, var(--glass)); }
-.banner.heal::before { background: var(--accent); }
+.banner.heal { color: var(--ink); background: var(--accent-soft); border-color: var(--accent-line); }
+.banner.heal::after { background: var(--accent); }
 .banner.heal .banner-title { color: var(--accent); }
-.banner.warn { color: var(--ink); background: color-mix(in srgb, var(--warn) 10%, var(--glass)); }
-.banner.warn::before { background: var(--warn); }
+.banner.warn { color: var(--ink); background: var(--warn-soft); border-color: var(--warn-line); }
+.banner.warn::after { background: var(--warn); }
 .banner.warn .banner-title { color: var(--warn); }
 
 /* A field this page does not carry is information, not a fault. It gets the
    same shape as a warning and none of the alarm. */
-.banner.note { color: var(--ink-2); }
-.banner.note::before { background: var(--edge-2); }
+.banner.note { color: var(--ink-2); background: var(--surface-1); border-left: 0; }
+.banner.note::after { background: var(--line-3); }
 .banner.note .banner-title { color: var(--ink-3); }
 
 /* ---------------------------------------------------------------- *
  * Setup prompt
  * ---------------------------------------------------------------- */
 
-.setup { gap: 13px; }
-.setup-head { display: grid; grid-template-columns: 30px 1fr; gap: 12px; align-items: start; }
+.setup { gap: var(--s-4); }
+.setup-head { display: grid; grid-template-columns: 30px 1fr; gap: var(--s-3); align-items: start; }
 
 .setup-icon {
   display: grid;
   place-items: center;
   width: 30px;
   height: 30px;
-  border-radius: 10px;
-  border: 1px solid var(--edge);
+  border-radius: 9px;
+  border: 1px solid var(--line);
   background: var(--well);
-  box-shadow: inset 0 1px 0 var(--spec);
   color: var(--accent);
 }
 .setup-icon svg { width: 15px; height: 15px; }
@@ -440,83 +403,56 @@ body[data-busy="1"] .dot { background: var(--accent); animation: pulse-ring 1.4s
   display: block;
   font-size: 12.5px;
   font-weight: 620;
-  letter-spacing: -0.008em;
+  letter-spacing: -0.014em;
   margin-bottom: 3px;
 }
-.setup-text p { margin: 0; font-size: 11.5px; line-height: 1.5; color: var(--ink-2); }
-.setup .btn { align-self: flex-start; }
+.setup-text p { margin: 0; font-size: 11.5px; line-height: 1.55; color: var(--ink-2); }
+.setup-actions { display: flex; gap: var(--s-2); flex-wrap: wrap; }
 
 /* ---------------------------------------------------------------- *
  * Advisory
  *
  * The signature of the whole product: the call, the confidence in it and the
- * hue it is lit by, drawn as one instrument.
+ * hue the panel is lit by, read as one statement.
  * ---------------------------------------------------------------- */
 
-.advice { gap: 13px; }
+.advice { gap: var(--s-4); }
 
 /* `--confidence` is a registered property, so this one line is what makes the
-   gauge sweep to its reading instead of snapping to it. */
-#advice-card { transition: --confidence 900ms var(--spring); }
+   meter sweep to its reading instead of snapping to it. The fill's own width
+   transition is dropped here so the two do not fight over the same number. */
+#advice-card { transition: --confidence 800ms var(--spring); }
+.advice .meter-fill { transition: background var(--base) var(--ease); }
 
-.verdict { display: flex; align-items: center; gap: 16px; }
+.advice-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--s-3); }
 
-.lens {
-  position: relative;
-  width: 94px;
-  height: 94px;
-  flex: none;
+.source {
+  margin: 0;
+  font-size: 10.5px;
+  line-height: 1.4;
+  color: var(--ink-3);
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.verdict {
   display: grid;
-  place-items: center;
-  animation: lens-in 620ms var(--spring) both;
-}
-
-@keyframes lens-in {
-  from { opacity: 0; transform: scale(0.82); }
-  to { opacity: 1; transform: none; }
-}
-
-/* The verdict's own light, sitting behind the glass of the ring. */
-.lens::before {
-  content: "";
-  position: absolute;
-  inset: 8px;
-  border-radius: 50%;
-  background: radial-gradient(circle, var(--tone-solid, transparent) 0%, transparent 72%);
-  opacity: 0.24;
-  filter: blur(6px);
-}
-
-/* The groove the arc runs in. Masked to a ring so the centre stays clear for
-   the word. */
-.confidence-track {
-  position: absolute;
-  inset: 0;
-  border-radius: 50%;
-  background: var(--groove);
-  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 8px), #000 calc(100% - 7px));
-  mask: radial-gradient(farthest-side, transparent calc(100% - 8px), #000 calc(100% - 7px));
-}
-
-/* The arc itself: `--confidence` percent of a turn, starting at twelve
-   o'clock. popup.js writes that number and nothing else. */
-.confidence-fill {
-  position: absolute;
-  inset: 0;
-  border-radius: 50%;
-  background: conic-gradient(var(--tone-solid, var(--ink-3)) calc(var(--confidence, 0) * 1%), transparent 0);
-  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 8px), #000 calc(100% - 7px));
-  mask: radial-gradient(farthest-side, transparent calc(100% - 8px), #000 calc(100% - 7px));
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: var(--s-4);
+  padding: var(--s-4);
+  border-radius: var(--r-2);
+  background: var(--well);
+  border: 1px solid var(--line);
 }
 
 /* The verdict word. The class name is load-bearing: popup.js writes
    `badge <ACTION>` so the action doubles as the style hook. */
 .badge {
-  position: relative;
   font-family: var(--font-display);
-  font-size: 22px;
+  font-size: 30px;
   font-weight: 680;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.035em;
   line-height: 1;
   color: var(--ink-2);
 }
@@ -524,68 +460,58 @@ body[data-busy="1"] .dot { background: var(--accent); animation: pulse-ring 1.4s
 .badge.SELL { color: var(--down); }
 .badge.HOLD { color: var(--hold); }
 
-.verdict-read { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+body[data-verdict="BUY"] .verdict { --meter-color: var(--up); }
+body[data-verdict="SELL"] .verdict { --meter-color: var(--down); }
+body[data-verdict="HOLD"] .verdict { --meter-color: var(--hold); }
+
+.verdict-read { display: flex; flex-direction: column; gap: var(--s-2); min-width: 0; }
 
 .score {
   margin: 0;
-  font-family: var(--font-display);
-  font-size: 15px;
-  font-weight: 600;
-  letter-spacing: -0.015em;
-  color: var(--ink);
-}
-
-.source {
-  margin: 0;
-  font-size: 10.5px;
-  line-height: 1.45;
+  font-size: 11px;
+  font-weight: 560;
+  letter-spacing: 0.01em;
   color: var(--ink-3);
-  overflow-wrap: anywhere;
+  font-variant-numeric: tabular-nums;
 }
 
 .rationale {
   margin: 0;
   font-size: 12.5px;
-  line-height: 1.58;
+  line-height: 1.6;
   color: var(--ink);
-  letter-spacing: -0.004em;
-  padding: 11px 12px;
-  border-radius: var(--r-2);
-  background: var(--well);
-  border: 1px solid var(--edge);
-  box-shadow: inset 0 1px 0 var(--spec);
+  letter-spacing: -0.006em;
 }
 
 .advice .disclaimer {
-  border-top: 1px solid var(--edge);
-  padding-top: 10px;
+  border-top: 1px solid var(--line);
+  padding-top: var(--s-3);
 }
 
-.actions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; }
-.actions .btn { padding: 10px 8px; font-size: 12px; }
+.actions { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--s-2); }
+.actions .btn { padding: 9px 6px; font-size: 12px; }
 
 /* The three decisions are equally weighted: the extension must not nudge. */
-.approve:hover { border-color: color-mix(in srgb, var(--up) 50%, transparent); color: var(--up); background: color-mix(in srgb, var(--up) 13%, transparent); }
-.reject:hover { border-color: color-mix(in srgb, var(--down) 50%, transparent); color: var(--down); background: color-mix(in srgb, var(--down) 13%, transparent); }
-.override:hover { border-color: color-mix(in srgb, var(--hold) 50%, transparent); color: var(--hold); background: color-mix(in srgb, var(--hold) 13%, transparent); }
+.approve:hover { border-color: var(--up-line); color: var(--up); background: var(--up-soft); }
+.reject:hover { border-color: var(--down-line); color: var(--down); background: var(--down-soft); }
+.override:hover { border-color: var(--hold-line); color: var(--hold); background: var(--hold-soft); }
 
 .override-panel {
   display: grid;
   grid-template-columns: auto 1fr;
-  gap: 8px;
+  gap: var(--s-2);
   align-items: center;
-  padding: 12px;
+  padding: var(--s-3);
   border-radius: var(--r-2);
   background: var(--well);
-  border: 1px solid var(--edge);
-  box-shadow: inset 0 1px 0 var(--spec);
+  border: 1px solid var(--line);
   animation: rise var(--fast) var(--spring) both;
 }
 .override-panel label {
   font-size: 10px;
-  font-weight: 650;
+  font-weight: 640;
   text-transform: uppercase;
-  letter-spacing: 0.09em;
+  letter-spacing: 0.1em;
   color: var(--ink-3);
 }
 .override-panel #override-note { grid-column: 1 / -1; }
@@ -600,19 +526,22 @@ body[data-busy="1"] .dot { background: var(--accent); animation: pulse-ring 1.4s
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 10px;
+  gap: var(--s-3);
   font-family: var(--font-mono);
   font-size: 11px;
-  letter-spacing: 0.01em;
+  letter-spacing: -0.01em;
   color: var(--ink-2);
-  padding: 8px 0;
-  border-bottom: 1px solid var(--edge);
+  padding: 9px 0;
+  border-bottom: 1px solid var(--line);
 }
 .log li:last-child { border-bottom: 0; padding-bottom: 0; }
 .log li:first-child { padding-top: 0; }
 
 .log .verdict {
   display: inline;
+  padding: 0;
+  border: 0;
+  background: none;
   font-size: 9.5px;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -634,35 +563,47 @@ body[data-busy="1"] .dot { background: var(--accent); animation: pulse-ring 1.4s
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 20px;
-  background: color-mix(in srgb, var(--canvas) 55%, transparent);
-  backdrop-filter: blur(10px) saturate(120%);
-  -webkit-backdrop-filter: blur(10px) saturate(120%);
+  padding: var(--s-5);
+  background: color-mix(in srgb, var(--canvas) 78%, transparent);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
   animation: fade var(--fast) var(--ease) both;
 }
 
 @keyframes pop {
-  from { opacity: 0; transform: translateY(12px) scale(0.95); }
+  from { opacity: 0; transform: translateY(10px) scale(0.97); }
   to { opacity: 1; transform: none; }
 }
 
 .modal-box {
-  background: var(--glass-2);
-  border-color: var(--edge-2);
+  background: var(--raised);
+  border-color: var(--line-2);
   border-radius: var(--r-3);
-  padding: 18px;
+  padding: var(--s-5);
   width: 100%;
   max-width: 336px;
   display: flex;
   flex-direction: column;
-  gap: 11px;
-  box-shadow: var(--lift-3);
-  backdrop-filter: blur(30px) saturate(var(--sat));
-  -webkit-backdrop-filter: blur(30px) saturate(var(--sat));
+  gap: var(--s-3);
+  box-shadow: var(--e-3);
   animation: pop var(--base) var(--spring) both;
 }
 
-.modal-box h3 { font-size: 14.5px; font-weight: 640; letter-spacing: -0.012em; }
-#modal-body { margin: 0; font-size: 12.5px; line-height: 1.5; color: var(--ink); }
+.modal-box h3 { font-size: 15px; font-weight: 640; }
+#modal-body { margin: 0; font-size: 12.5px; line-height: 1.55; color: var(--ink); }
 
-.modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 2px; }
+.modal-actions { display: flex; gap: var(--s-2); justify-content: flex-end; margin-top: var(--s-1); }
+
+/* The guide button carries a dot until the setup guide has been seen once. */
+.icon-btn.is-new { position: relative; }
+.icon-btn.is-new::after {
+  content: "";
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  width: 6px;
+  height: 6px;
+  border-radius: var(--r-pill);
+  background: var(--accent);
+  box-shadow: 0 0 0 2px var(--canvas);
+}

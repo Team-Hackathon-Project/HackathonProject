@@ -1,26 +1,27 @@
 /*
- * Shared design system for every surface: the popup, the settings page and the
- * dashboard (which imports a synced copy of this file).
+ * The design system every surface is built from: the popup, the onboarding
+ * flow, the settings page and the dashboard (which imports a synced copy of
+ * this file via `npm run web:sync`).
  *
- * Four rules hold the whole thing together.
+ * Five rules hold the whole thing together.
  *
- *  1. Colour is information, not decoration. The chrome is cold blue glass and
- *     one accent - azure, the colour of the agent itself. Hue beyond that is
- *     spent only where it carries meaning: a price that moved, a verdict, a
- *     repair, a warning.
- *  2. Depth is material. Surfaces are panes of glass over a lit field: a
- *     translucent fill, a rim that catches the light along its top-left edge
- *     and fades away at the bottom-right, and a soft drop beneath. The light
- *     behind them drifts, slowly, so the glass is never a still photograph of
- *     glass.
- *  3. Identifiers are typeset as data. Tickers, hosts, selectors and field
- *     names are set in the monospace face with open tracking - they are
- *     wire-format symbols. Magnitudes get the display face and tabular
- *     figures, because what matters about a number is its size and its digits
- *     lining up under each other.
- *  4. Nothing appears without arriving. Panes rise in sequence, the gauge
- *     sweeps to its reading, switches settle on a spring. All of it is
- *     suspended wholesale under `prefers-reduced-motion`.
+ *  1. Ink and paper, not glass. Depth is a ladder of solid values — canvas,
+ *     then three raised surfaces — separated by a single hairline and one
+ *     honest shadow. Blurred translucency reads as a screenshot of a phase;
+ *     a material with real steps in it reads as an instrument.
+ *  2. Contrast is the primary action. The one button you are meant to press is
+ *     drawn in pure contrast: near-white on dark, near-black on light. Colour
+ *     is then free to mean something instead of marking importance.
+ *  3. Colour is state, never decoration. Exactly four hues carry meaning — a
+ *     rise, a fall, a caution, and the agent itself — and nothing else on any
+ *     surface is coloured at all.
+ *  4. Type does the hierarchy. Magnitudes are set large in the display face
+ *     with tight tracking and tabular figures; identifiers (tickers, hosts,
+ *     selectors) are set in the monospace face; region names are micro-caps
+ *     with wide tracking. Three registers, applied everywhere, no exceptions.
+ *  5. Motion is confirmation, not atmosphere. Everything moves once, quickly,
+ *     because something happened. There is no ambient animation anywhere in
+ *     the product, and all of it suspends under `prefers-reduced-motion`.
  *
  * Everything here is self-contained: no webfonts, no external assets, nothing
  * that would need a CSP exception or a network round trip.
@@ -30,7 +31,7 @@
  * Registered properties
  *
  * A custom property is a string until it is registered; once it has a type it
- * can be interpolated. `--confidence` is what lets the advisory gauge sweep to
+ * can be interpolated. `--confidence` is what lets the advisory meter sweep to
  * its reading rather than snapping there, from one number set in JS.
  * ---------------------------------------------------------------- */
 
@@ -43,174 +44,192 @@
 :root {
   color-scheme: dark;
 
-  /* ---- The field ------------------------------------------------ *
-   * Deep water rather than black: the floor is a blue ink, lit from three
-   * directions by washes cool enough that none of them ever reads as a
-   * gradient on its own. Glass needs something behind it to refract, and this
-   * is that something. */
-  --canvas: #05080f;
-  --field-2: #080e18;
+  /* ---- The value ladder ----------------------------------------- *
+   * Five steps, each a real change in lightness rather than an alpha wash
+   * over the one below it. A card on the canvas, a well inside the card, a
+   * raised sheet above both: you can tell which is which with the colour
+   * turned off, which is the test a depth system has to pass. */
+  --canvas: #08090c;
+  --surface-1: #0e1015;
+  --surface-2: #14171d;
+  --surface-3: #1b1f27;
+  --well: #0a0c10;
 
-  --aura-1: 74, 138, 255;   /* azure - the agent's own hue, top left */
-  --aura-2: 18, 164, 190;   /* cyan - depth, top right */
-  --aura-3: 38, 70, 168;    /* deep blue - the floor, low and far off */
-  --aura-a: 0.2;
+  /* The ground for something floating over the page — a modal, a toast, a
+     sticky action bar. In dark it is a step brighter than the page; in light
+     it is pure white against the paper. It is a separate token from the
+     interaction steps because those two jobs move in opposite directions
+     between the schemes. */
+  --raised: #14171d;
 
-  /* ---- The glass ------------------------------------------------ *
-   * Tinted cool rather than pure white: white glass over a dark field reads as
-   * frosted plastic, a blue tint reads as glass. */
-  --glass: rgba(146, 178, 226, 0.06);
-  --glass-2: rgba(146, 178, 226, 0.095);
-  --glass-3: rgba(146, 178, 226, 0.14);
-  --well: rgba(2, 5, 11, 0.5);
-  --groove: rgba(255, 255, 255, 0.1);
+  /* ---- Structure ------------------------------------------------ *
+   * One hairline weight for dividers, one for edges that need to be found. */
+  --line: rgba(255, 255, 255, 0.075);
+  --line-2: rgba(255, 255, 255, 0.13);
+  --line-3: rgba(255, 255, 255, 0.22);
 
-  --edge: rgba(255, 255, 255, 0.085);
-  --edge-2: rgba(255, 255, 255, 0.18);
-  --spec: rgba(255, 255, 255, 0.14);
+  /* The top-edge catch light. One pixel, only on raised surfaces. */
+  --sheen: rgba(255, 255, 255, 0.055);
 
-  /* The rim: bright where the light lands, gone by the far corner. */
-  --rim: linear-gradient(150deg,
-    rgba(255, 255, 255, 0.32) 0%,
-    rgba(255, 255, 255, 0.08) 22%,
-    rgba(255, 255, 255, 0) 48%,
-    rgba(255, 255, 255, 0.05) 100%);
+  /* ---- Ink ------------------------------------------------------ *
+   * Four weights, and every one of them clears 4.5:1 against the surface it
+   * is used on. A tertiary grey dim enough to be pretty and too dim to read
+   * is the most common way a dark interface fails its users, so the hierarchy
+   * here is carried by size and weight as much as by value. */
+  --ink: #f4f6f9;
+  --ink-2: #a2abb8;
+  --ink-3: #8791a0;
+  --ink-4: #737d8b;
 
-  --blur: 22px;
-  --sat: 165%;
+  /* ---- Contrast: the primary action ----------------------------- *
+   * The single most important control on any surface is drawn in the highest
+   * contrast available, not in a brand colour. */
+  --solid: #f6f8fb;
+  --solid-ink: #08090c;
+  --solid-hover: #ffffff;
 
-  /* ---- Ink ------------------------------------------------------ */
-  --ink: #e8eef7;
-  --ink-2: #97a7bd;
-  --ink-3: #6f8095;
+  /* ---- The four meaningful hues --------------------------------- */
+  --accent: #5b9bff;        /* the agent: what it repaired, what it is doing */
+  --accent-soft: rgba(91, 155, 255, 0.14);
+  --accent-line: rgba(91, 155, 255, 0.34);
+  --accent-rgb: 91, 155, 255;
 
-  /* ---- The accent ----------------------------------------------- *
-   * One colour carries the product: the primary action, the agent at work, a
-   * repaired selector, the active rail entry. It is bright enough to take dark
-   * text, which is what keeps a coloured button legible without shouting. */
-  --accent: #7fb0ff;
-  --accent-2: #5b90f5;
-  --accent-deep: #3f6fd8;
-  --accent-ink: #041020;
-  --accent-rgb: 127, 176, 255;
+  --up: #3ecf8e;
+  --up-soft: rgba(62, 207, 142, 0.12);
+  --up-line: rgba(62, 207, 142, 0.32);
 
-  /* ---- The only other hues in the system ------------------------ */
-  --up: #35d19b;
-  --down: #f5706e;
-  --hold: #9fb3cd;   /* hold is the absence of an action, so it has no hue */
-  --agent: var(--accent);
-  --warn: #e0a860;
+  --down: #f2555a;
+  --down-soft: rgba(242, 85, 90, 0.12);
+  --down-line: rgba(242, 85, 90, 0.32);
 
-  --focus: rgba(255, 255, 255, 0.92);
-  --focus-ring: rgba(5, 8, 15, 0.85);
+  --warn: #e8a33d;
+  --warn-soft: rgba(232, 163, 61, 0.12);
+  --warn-line: rgba(232, 163, 61, 0.32);
 
+  /* Hold is the absence of an action, so it is deliberately colourless. */
+  --hold: #9aa4b2;
+  --hold-soft: rgba(154, 164, 178, 0.12);
+  --hold-line: rgba(154, 164, 178, 0.3);
+
+  --focus: #ffffff;
+  --focus-halo: rgba(8, 9, 12, 0.9);
+
+  /* ---- Geometry -------------------------------------------------- */
   --r-1: 8px;
   --r-2: 12px;
-  --r-3: 18px;
+  --r-3: 16px;
+  --r-4: 22px;
+  --r-pill: 999px;
 
-  /* The specular line lives in the shadow stack so a pane needs one property
-     to become glass, and so the highlight can never be cancelled by a border
-     colour set somewhere downstream. */
-  --lift-1: inset 0 1px 0 var(--spec), 0 1px 2px rgba(0, 0, 0, 0.36);
-  --lift-2: inset 0 1px 0 var(--spec), 0 18px 38px -18px rgba(0, 0, 0, 0.7),
-    0 2px 8px rgba(0, 0, 0, 0.32);
-  --lift-3: inset 0 1px 0 var(--spec), 0 38px 74px -24px rgba(0, 0, 0, 0.8),
-    0 4px 14px rgba(0, 0, 0, 0.44);
+  /* A 4px spacing scale. Every gap and pad in the product is one of these. */
+  --s-1: 4px;
+  --s-2: 8px;
+  --s-3: 12px;
+  --s-4: 16px;
+  --s-5: 20px;
+  --s-6: 24px;
+  --s-7: 32px;
+  --s-8: 40px;
+  --s-9: 56px;
 
-  --glow: 0 8px 26px -8px rgba(var(--accent-rgb), 0.5);
+  /* ---- Elevation ------------------------------------------------- *
+   * Three steps and no more. Each is one soft shadow — a stack of four
+   * shadows is how a surface starts looking like a sticker. */
+  --e-1: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --e-2: 0 8px 24px -10px rgba(0, 0, 0, 0.7), 0 2px 6px rgba(0, 0, 0, 0.3);
+  --e-3: 0 32px 64px -24px rgba(0, 0, 0, 0.8), 0 4px 12px rgba(0, 0, 0, 0.4);
 
-  --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+  /* ---- Motion ---------------------------------------------------- */
+  --ease: cubic-bezier(0.2, 0.6, 0.2, 1);
   --spring: cubic-bezier(0.16, 1, 0.3, 1);
-  --fast: 130ms;
-  --base: 240ms;
-  --slow: 560ms;
+  --fast: 120ms;
+  --base: 220ms;
+  --slow: 420ms;
 
-  --font: "Segoe UI Variable Text", -apple-system, BlinkMacSystemFont, "SF Pro Text",
-    "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  --font-display: "Segoe UI Variable Display", -apple-system, BlinkMacSystemFont,
-    "SF Pro Display", "Segoe UI", Roboto, sans-serif;
-  --font-mono: ui-monospace, "Cascadia Mono", SFMono-Regular, Menlo, Consolas, monospace;
+  /* ---- Type ------------------------------------------------------ */
+  --font: Inter, "SF Pro Text", -apple-system, BlinkMacSystemFont,
+    "Segoe UI Variable Text", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-display: "Inter Display", Inter, "SF Pro Display", -apple-system,
+    BlinkMacSystemFont, "Segoe UI Variable Display", "Segoe UI", Roboto, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", "Cascadia Mono",
+    SFMono-Regular, Menlo, Consolas, monospace;
 
-  --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E");
-  --grain-opacity: 0.03;
+  /* The grain is what stops a large flat panel from reading as plastic. It is
+     barely above the noise floor, and that is the point. */
+  --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E");
+  --grain-opacity: 0.022;
+
+  /* The engineered texture: a 1px rule every 26px, used behind hero regions
+     at an opacity you notice only once you look for it. */
+  --mesh: linear-gradient(var(--line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--line) 1px, transparent 1px);
+  --mesh-size: 26px 26px;
 }
 
 @media (prefers-color-scheme: light) {
   :root {
     color-scheme: light;
 
-    --canvas: #eef2f8;
-    --field-2: #e3e9f4;
+    /* Paper, not white: a warm-neutral ground with true white sheets on it, so
+       a card is visibly a sheet rather than a border drawn on the page. */
+    --canvas: #f4f5f7;
+    --surface-1: #ffffff;
+    --surface-2: #f6f7f9;
+    --surface-3: #edeff3;
+    --well: #f5f6f8;
+    --raised: #ffffff;
 
-    --aura-1: 58, 118, 235;
-    --aura-2: 16, 150, 176;
-    --aura-3: 46, 82, 180;
-    --aura-a: 0.14;
+    --line: rgba(10, 14, 22, 0.085);
+    --line-2: rgba(10, 14, 22, 0.15);
+    --line-3: rgba(10, 14, 22, 0.26);
+    --sheen: rgba(255, 255, 255, 0);
 
-    /* In light the glass is a frost: mostly white, still translucent enough
-       to pick up the washes underneath it. */
-    --glass: rgba(255, 255, 255, 0.66);
-    --glass-2: rgba(255, 255, 255, 0.85);
-    --glass-3: rgba(255, 255, 255, 0.95);
-    --well: rgba(12, 22, 40, 0.045);
-    --groove: rgba(12, 22, 40, 0.14);
+    --ink: #0b0e14;
+    --ink-2: #545d6b;
+    --ink-3: #697180;
+    --ink-4: #767f8d;
 
-    --edge: rgba(12, 22, 40, 0.1);
-    --edge-2: rgba(12, 22, 40, 0.2);
-    --spec: rgba(255, 255, 255, 0.9);
+    --solid: #0b0e14;
+    --solid-ink: #ffffff;
+    --solid-hover: #000000;
 
-    --rim: linear-gradient(150deg,
-      rgba(255, 255, 255, 0.95) 0%,
-      rgba(255, 255, 255, 0.4) 26%,
-      rgba(12, 22, 40, 0.03) 60%,
-      rgba(12, 22, 40, 0.06) 100%);
+    --accent: #2563eb;
+    --accent-soft: rgba(37, 99, 235, 0.09);
+    --accent-line: rgba(37, 99, 235, 0.3);
+    --accent-rgb: 37, 99, 235;
 
-    --ink: #0c141f;
-    --ink-2: #53616f;
-    --ink-3: #687584;
+    --up: #0f8a5f;
+    --up-soft: rgba(15, 138, 95, 0.1);
+    --up-line: rgba(15, 138, 95, 0.28);
 
-    --accent: #2f66d8;
-    --accent-2: #2557c2;
-    --accent-deep: #1c47a6;
-    --accent-ink: #ffffff;
-    --accent-rgb: 47, 102, 216;
+    --down: #cf3b3f;
+    --down-soft: rgba(207, 59, 63, 0.09);
+    --down-line: rgba(207, 59, 63, 0.28);
 
-    --up: #10805a;
-    --down: #c2413a;
-    --hold: #566579;
-    --warn: #8f6a1a;
+    --warn: #9a6a12;
+    --warn-soft: rgba(154, 106, 18, 0.1);
+    --warn-line: rgba(154, 106, 18, 0.28);
 
-    --focus: rgba(12, 22, 40, 0.75);
-    --focus-ring: rgba(255, 255, 255, 0.9);
+    --hold: #5b6472;
+    --hold-soft: rgba(91, 100, 114, 0.09);
+    --hold-line: rgba(91, 100, 114, 0.26);
 
-    --lift-1: inset 0 1px 0 var(--spec), 0 1px 2px rgba(12, 22, 40, 0.07);
-    --lift-2: inset 0 1px 0 var(--spec), 0 18px 38px -18px rgba(12, 22, 40, 0.26),
-      0 2px 6px rgba(12, 22, 40, 0.07);
-    --lift-3: inset 0 1px 0 var(--spec), 0 36px 70px -24px rgba(12, 22, 40, 0.3),
-      0 4px 12px rgba(12, 22, 40, 0.09);
+    --focus: #0b0e14;
+    --focus-halo: rgba(255, 255, 255, 0.95);
 
-    --glow: 0 8px 24px -10px rgba(var(--accent-rgb), 0.55);
+    --e-1: 0 1px 2px rgba(10, 14, 22, 0.06);
+    --e-2: 0 10px 24px -12px rgba(10, 14, 22, 0.2), 0 2px 4px rgba(10, 14, 22, 0.05);
+    --e-3: 0 32px 64px -24px rgba(10, 14, 22, 0.22), 0 4px 10px rgba(10, 14, 22, 0.07);
 
-    --grain-opacity: 0.04;
-  }
-}
-
-/* Someone who has asked their system for less transparency gets panes that
-   still read as layered - rim, highlight, shadow - without the blur or the
-   see-through. */
-@media (prefers-reduced-transparency: reduce) {
-  :root {
-    --glass: color-mix(in srgb, var(--canvas) 88%, #8ba6cc);
-    --glass-2: color-mix(in srgb, var(--canvas) 80%, #8ba6cc);
-    --glass-3: color-mix(in srgb, var(--canvas) 72%, #8ba6cc);
-    --blur: 0px;
-    --aura-a: 0.06;
+    --grain-opacity: 0.03;
   }
 }
 
 *,
 *::before,
 *::after { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
 
 body {
   margin: 0;
@@ -220,54 +239,31 @@ body {
   font-size: 13px;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
   font-variant-numeric: tabular-nums;
+  letter-spacing: -0.002em;
 }
 
 /*
- * The lit field, in two layers that drift against each other.
+ * The ground.
  *
- * Every surface gets it for free. The drift is what separates this from a
- * gradient wallpaper: over a minute the light moves a few percent, the panes
- * re-refract it, and the glass reads as a material sitting in a room rather
- * than a texture pasted behind the content. Both layers are transform-only, so
- * each is one composited layer and never a repaint.
+ * One fixed layer, painted once and never animated: a cold pool of the agent's
+ * own hue in the top-left corner and a colder one bottom-right, both far below
+ * the point where they would read as a gradient. It gives the flat surfaces
+ * above them something to sit in without ever competing with them.
  */
-body::before,
-body::after {
+body::before {
   content: "";
   position: fixed;
-  inset: -14%;
+  inset: 0;
   z-index: 0;
   pointer-events: none;
-  will-change: transform;
-}
-
-body::before {
   background:
-    radial-gradient(46% 40% at 14% 6%, rgba(var(--aura-1), var(--aura-a)) 0%, transparent 70%),
-    radial-gradient(40% 36% at 88% 10%, rgba(var(--aura-2), calc(var(--aura-a) * 0.8)) 0%, transparent 72%);
-  animation: drift-a 54s var(--ease) infinite alternate;
+    radial-gradient(58% 42% at 12% 0%, rgba(var(--accent-rgb), 0.07), transparent 68%),
+    radial-gradient(50% 40% at 96% 100%, rgba(var(--accent-rgb), 0.045), transparent 72%);
 }
 
-body::after {
-  background:
-    radial-gradient(52% 44% at 72% 96%, rgba(var(--aura-3), calc(var(--aura-a) * 0.9)) 0%, transparent 74%),
-    radial-gradient(38% 34% at 26% 78%, rgba(var(--aura-2), calc(var(--aura-a) * 0.45)) 0%, transparent 76%);
-  animation: drift-b 78s var(--ease) infinite alternate;
-}
-
-@keyframes drift-a {
-  from { transform: translate3d(-2%, -1%, 0) scale(1); }
-  to { transform: translate3d(3%, 2%, 0) scale(1.09); }
-}
-
-@keyframes drift-b {
-  from { transform: translate3d(2%, 1%, 0) scale(1.06); }
-  to { transform: translate3d(-3%, -2%, 0) scale(1); }
-}
-
-/* A single film of noise over the whole surface. Barely perceptible on its
-   own; what it does is stop large panes from looking like plastic. */
+/* A single film of noise over everything. */
 .grain {
   position: fixed;
   inset: 0;
@@ -281,77 +277,72 @@ body::after {
 /* ---------------------------------------------------------------- *
  * The material
  *
- * `.pane` is the glass, and its `::after` is the rim: a one-pixel gradient
- * border, bright along the top-left where the light lands and gone by the
- * opposite corner. A flat border draws a box; this draws an edge with a
- * thickness, which is the whole difference between a card and a pane.
- *
- * Blur is applied here and nowhere inside a pane: stacking backdrop filters is
- * what turns a page like this into a slideshow, and a second blur behind the
- * first buys nothing anyone can see.
+ * `.pane` and `.card` are the same sheet: a solid raised value, one hairline,
+ * one shadow, and a single-pixel catch light along the top edge. That is the
+ * entire recipe, and nothing in the product draws its own.
  * ---------------------------------------------------------------- */
 
 .pane,
 .card {
   position: relative;
-  background: linear-gradient(178deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0) 42%), var(--glass);
-  border: 1px solid var(--edge);
-  box-shadow: var(--lift-1);
-  backdrop-filter: blur(var(--blur)) saturate(var(--sat));
-  -webkit-backdrop-filter: blur(var(--blur)) saturate(var(--sat));
+  background: var(--surface-1);
+  border: 1px solid var(--line);
+  border-radius: var(--r-3);
+  box-shadow: var(--e-1);
 }
 
-.pane::after,
-.card::after {
+.pane::before,
+.card::before {
   content: "";
   position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  padding: 1px;
-  background: var(--rim);
-  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-  -webkit-mask-composite: xor;
-  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-  mask-composite: exclude;
+  left: 1px;
+  right: 1px;
+  top: 0;
+  height: 1px;
+  background: var(--sheen);
   pointer-events: none;
-  z-index: 1;
 }
 
 .card {
-  border-radius: var(--r-3);
-  padding: 16px;
+  padding: var(--s-4);
   display: flex;
   flex-direction: column;
-  gap: 11px;
+  gap: var(--s-3);
 }
 
 /* ---------------------------------------------------------------- *
  * Type
  * ---------------------------------------------------------------- */
 
-h1, h2, h3 { font-family: var(--font-display); margin: 0; }
+h1, h2, h3 {
+  font-family: var(--font-display);
+  margin: 0;
+  letter-spacing: -0.022em;
+  font-weight: 620;
+}
 
-/* The section label: the quietest possible way to name a region. */
+/* The region name: the quietest possible way to title an area. */
 .label,
 h2.label {
   font-size: 10px;
-  font-weight: 650;
+  font-weight: 640;
   text-transform: uppercase;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.11em;
   color: var(--ink-3);
+  font-family: var(--font);
 }
 
 .muted { color: var(--ink-2); }
-.small { font-size: 11px; }
+.small { font-size: 11.5px; }
 
 .mono {
   font-family: var(--font-mono);
   font-size: 11px;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.012em;
 }
 
-/* A wire-format identifier: a ticker, a host, a field name. Set apart by
-   tracking rather than by a box drawn around it. */
+/* A wire-format identifier: a ticker, a host, a field name. Set apart by the
+   face and by tracking, never by a box drawn around it. */
 .symbol {
   font-family: var(--font-mono);
   font-weight: 600;
@@ -359,26 +350,50 @@ h2.label {
   text-transform: uppercase;
 }
 
+/* A magnitude. The one thing on any surface allowed to be large. */
+.figure {
+  font-family: var(--font-display);
+  font-weight: 620;
+  letter-spacing: -0.042em;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
 .disclaimer {
   margin: 0;
   font-size: 11px;
-  line-height: 1.45;
+  line-height: 1.5;
   color: var(--ink-3);
 }
 
 .hidden { display: none !important; }
 
+code {
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: var(--well);
+  border: 1px solid var(--line);
+  color: var(--ink-2);
+}
+
+a {
+  color: var(--accent);
+  text-decoration-color: color-mix(in srgb, var(--accent) 40%, transparent);
+  text-underline-offset: 2px;
+}
+a:hover { color: var(--ink); }
+
 /* ---------------------------------------------------------------- *
  * The mark
  *
- * An open gauge ring with a rising line inside it - the same instrument the
- * advisory draws, at 24px. The gap in the ring is the point: this is a tool
- * that expects to find something broken and closes the loop itself.
- *
- * The lockup is the mark, the name, and a descriptor line beneath it.
+ * An open gauge ring with a rising line breaking out through the gap: the
+ * instrument the advisory draws, at 24px. The gap is the point — this is a
+ * tool that expects to find something broken and closes the loop itself.
  * ---------------------------------------------------------------- */
 
-.brand { display: flex; align-items: center; gap: 11px; min-width: 0; }
+.brand { display: flex; align-items: center; gap: var(--s-3); min-width: 0; }
 
 .mark {
   position: relative;
@@ -387,20 +402,17 @@ h2.label {
   flex: none;
   width: 34px;
   height: 34px;
-  border-radius: 11px;
-  border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--edge));
-  background: linear-gradient(155deg,
-    color-mix(in srgb, var(--accent) 26%, transparent),
-    color-mix(in srgb, var(--accent-deep) 14%, transparent));
-  box-shadow: var(--lift-1), inset 0 0 18px -6px rgba(var(--accent-rgb), 0.55);
-  color: var(--accent);
+  border-radius: 10px;
+  background: var(--solid);
+  color: var(--solid-ink);
+  box-shadow: var(--e-1);
 }
 .mark svg { width: 19px; height: 19px; }
 
-/* The ring turns while the agent is working: the mark is the instrument, so it
-   is the thing that should look busy. */
+/* The ring turns while the agent works: the mark is the instrument, so it is
+   the thing that should look busy. */
 .mark .ring { transform-box: view-box; transform-origin: 12px 12px; }
-body[data-busy="1"] .mark .ring { animation: mark-spin 1.7s linear infinite; }
+body[data-busy="1"] .mark .ring { animation: mark-spin 1.5s linear infinite; }
 
 @keyframes mark-spin { to { transform: rotate(360deg); } }
 
@@ -409,8 +421,8 @@ body[data-busy="1"] .mark .ring { animation: mark-spin 1.7s linear infinite; }
 .brand-name {
   font-family: var(--font-display);
   font-size: 13.5px;
-  font-weight: 640;
-  letter-spacing: -0.012em;
+  font-weight: 620;
+  letter-spacing: -0.018em;
   line-height: 1.2;
   color: var(--ink);
 }
@@ -418,23 +430,58 @@ body[data-busy="1"] .mark .ring { animation: mark-spin 1.7s linear infinite; }
 /* ---------------------------------------------------------------- *
  * The rule
  *
- * A measuring instrument has a scale on it. This is that scale, one pixel
- * high, used where a surface needs a bottom edge. It is the only ornament in
- * the system, it is drawn rather than decorative, and it appears twice.
+ * A measuring instrument has a scale on it. This is that scale: a ruled
+ * hairline used where a surface needs a bottom edge with intent.
  * ---------------------------------------------------------------- */
 
 .rule {
   height: 1px;
-  background-image: repeating-linear-gradient(90deg, var(--edge-2) 0 1px, transparent 1px 7px);
+  background-image: repeating-linear-gradient(90deg, var(--line-2) 0 1px, transparent 1px 6px);
+}
+
+/* ---------------------------------------------------------------- *
+ * The meter
+ *
+ * The product's one repeated instrument: a thin track with a filled span and
+ * a tick scale ruled over it. It draws the advisory's confidence, the target
+ * band on a watch card and the onboarding progress — the same object each
+ * time, so a filled proportion always means the same kind of thing.
+ * ---------------------------------------------------------------- */
+
+.meter {
+  position: relative;
+  height: 6px;
+  border-radius: var(--r-pill);
+  background: var(--well);
+  border: 1px solid var(--line);
+  overflow: hidden;
+}
+
+.meter-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: calc(var(--confidence, 0) * 1%);
+  border-radius: inherit;
+  background: var(--meter-color, var(--accent));
+  transition: width var(--slow) var(--spring), background var(--base) var(--ease);
+}
+
+/* The scale, ruled over the top of the fill so the reading can be counted. */
+.meter::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: repeating-linear-gradient(90deg, var(--canvas) 0 1px, transparent 1px 10%);
   opacity: 0.5;
+  pointer-events: none;
 }
 
 /* ---------------------------------------------------------------- *
  * Focus
  *
- * Two rings, not one: a bright outline for the keyboard user and a dark halo
- * behind it, so the ring survives landing on a pale pane, a dark pane, or the
- * lit field between them.
+ * Two rings: a bright outline for the keyboard user and a dark halo behind it,
+ * so the ring survives landing on a pale sheet, a dark sheet, or the ground
+ * between them.
  * ---------------------------------------------------------------- */
 
 :focus { outline: none; }
@@ -443,7 +490,7 @@ body[data-busy="1"] .mark .ring { animation: mark-spin 1.7s linear infinite; }
   outline: 2px solid var(--focus);
   outline-offset: 2px;
   border-radius: var(--r-1);
-  box-shadow: 0 0 0 4px var(--focus-ring);
+  box-shadow: 0 0 0 4px var(--focus-halo);
 }
 
 /* ---------------------------------------------------------------- *
@@ -458,101 +505,71 @@ button {
 }
 
 /*
- * The default button is a small pane of the same glass as everything else, so
- * it belongs to the surface rather than sitting on top of it. It lifts on
- * hover and sinks on press - the one place motion is allowed to be literal,
- * because that is what a key does.
+ * The default key: a raised sheet of the same material as everything else, so
+ * it belongs to the surface rather than sitting on top of it.
  */
 .btn {
   position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 7px;
-  padding: 9px 15px;
+  gap: var(--s-2);
+  padding: 9px 14px;
+  min-height: 34px;
   border-radius: var(--r-2);
-  border: 1px solid var(--edge);
-  background: var(--glass-2);
-  box-shadow: var(--lift-1);
-  backdrop-filter: blur(12px) saturate(var(--sat));
-  -webkit-backdrop-filter: blur(12px) saturate(var(--sat));
+  border: 1px solid var(--line-2);
+  background: var(--surface-2);
   color: var(--ink);
   font-weight: 550;
-  letter-spacing: -0.005em;
-  overflow: hidden;
+  font-size: 12.5px;
+  letter-spacing: -0.008em;
+  white-space: nowrap;
+  box-shadow: var(--e-1);
   transition: background var(--fast) var(--ease), border-color var(--fast) var(--ease),
     color var(--fast) var(--ease), transform var(--fast) var(--ease),
     box-shadow var(--fast) var(--ease), opacity var(--fast) var(--ease);
 }
 
-/* The sheen: a band of light that crosses the key once, as the pointer
-   arrives. Glass catching a highlight as it turns, not a loop on a timer. */
-.btn::before {
-  content: "";
-  position: absolute;
-  top: -60%;
-  bottom: -60%;
-  left: 0;
-  width: 34%;
-  background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.24), transparent);
-  transform: translateX(-160%) skewX(-14deg);
-  pointer-events: none;
-  opacity: 0;
-}
-.btn:hover::before { animation: sheen 720ms var(--ease) 1; }
-
-@keyframes sheen {
-  from { transform: translateX(-160%) skewX(-14deg); opacity: 0; }
-  35% { opacity: 1; }
-  to { transform: translateX(460%) skewX(-14deg); opacity: 0; }
-}
-
-.btn:hover { background: var(--glass-3); border-color: var(--edge-2); box-shadow: var(--lift-2); }
-.btn:active { transform: translateY(1px) scale(0.99); box-shadow: var(--lift-1); }
-.btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none; box-shadow: var(--lift-1); }
-.btn:disabled::before { animation: none; }
+.btn:hover { background: var(--surface-3); border-color: var(--line-3); }
+.btn:active { transform: translateY(1px); box-shadow: none; }
+.btn:disabled { opacity: 0.42; cursor: not-allowed; transform: none; }
 
 .btn .i { flex: none; width: 15px; height: 15px; }
 
 /*
- * The primary action is the accent, lit from above and casting its own colour
- * onto the pane below it. Dark text on a bright key: the contrast is carried
- * by the type, which leaves the colour free to be saturated.
+ * The primary action is pure contrast rather than a brand colour: near-white
+ * on a dark surface, near-black on a light one. It is unmissable at any size,
+ * it never competes with the hues that carry meaning, and it is the single
+ * decision that makes the whole product read as deliberate.
  */
 .btn.primary {
-  background: linear-gradient(170deg, var(--accent) 0%, var(--accent-2) 62%, var(--accent-deep) 100%);
-  color: var(--accent-ink);
-  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
-  font-weight: 640;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45), var(--glow);
+  background: var(--solid);
+  color: var(--solid-ink);
+  border-color: transparent;
+  font-weight: 600;
 }
-.btn.primary:hover {
-  filter: brightness(1.07);
-  border-color: color-mix(in srgb, var(--accent) 75%, transparent);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55), 0 12px 32px -8px rgba(var(--accent-rgb), 0.6);
-}
-.btn.primary:disabled { filter: none; box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3); }
+.btn.primary:hover { background: var(--solid-hover); border-color: transparent; box-shadow: var(--e-2); }
+.btn.primary:disabled { background: var(--solid); box-shadow: none; }
 
+/* The quiet key: no fill, but it keeps its hairline. A button drawn as bare
+   text is indistinguishable from a label until the pointer finds it, which is
+   the wrong thing for a control that sends a request. */
 .btn.ghost {
   background: transparent;
+  border-color: var(--line);
   box-shadow: none;
-  border-color: var(--edge);
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
   color: var(--ink-2);
 }
-.btn.ghost:hover { background: var(--glass-2); border-color: var(--edge-2); color: var(--ink); box-shadow: var(--lift-1); }
+.btn.ghost:hover { background: var(--surface-2); border-color: var(--line-3); color: var(--ink); }
 
 /* Destructive actions state themselves in the hue they mean, and only on the
    way to being pressed. */
 .btn.danger { color: var(--down); }
-.btn.danger:hover {
-  border-color: color-mix(in srgb, var(--down) 50%, transparent);
-  background: color-mix(in srgb, var(--down) 12%, transparent);
-}
+.btn.danger:hover { border-color: var(--down-line); background: var(--down-soft); color: var(--down); }
 
 .btn.block { width: 100%; }
-.btn.small { padding: 7px 12px; font-size: 12px; border-radius: var(--r-1); }
+.btn.small { padding: 6px 11px; min-height: 30px; font-size: 12px; border-radius: var(--r-1); }
+.btn.large { padding: 12px 20px; min-height: 44px; font-size: 14px; border-radius: var(--r-2); }
 
 .icon-btn {
   display: inline-flex;
@@ -566,55 +583,56 @@ button {
   background: transparent;
   color: var(--ink-3);
   transition: color var(--fast) var(--ease), background var(--fast) var(--ease),
-    border-color var(--fast) var(--ease), box-shadow var(--fast) var(--ease);
+    border-color var(--fast) var(--ease);
 }
-.icon-btn svg { width: 16px; height: 16px; transition: transform var(--slow) var(--spring); }
-.icon-btn:hover { color: var(--ink); background: var(--glass-2); border-color: var(--edge); box-shadow: var(--lift-1); }
-.icon-btn:hover svg { transform: rotate(40deg); }
+.icon-btn svg { width: 16px; height: 16px; }
+.icon-btn:hover { color: var(--ink); background: var(--surface-2); border-color: var(--line); }
 
 /* ---------------------------------------------------------------- *
  * Fields
  *
- * A field is a well cut into the pane, not another pane on top of it: darker
- * than its surroundings, with the light line along the bottom edge where a
- * recess would catch it rather than along the top. Focus rings it in the
- * accent, so the thing you are typing into is the thing the agent is lit by.
+ * A field is a well cut into the sheet, not another sheet on top of it: a
+ * darker value with the hairline continuing around it. Focus rings it in the
+ * accent, so the thing you are typing into is lit by the agent's own colour.
  * ---------------------------------------------------------------- */
 
 input[type="text"],
 input[type="password"],
 input[type="number"],
 input[type="url"],
-select {
+input[type="search"],
+select,
+textarea {
   background: var(--well);
-  border: 1px solid var(--edge);
+  border: 1px solid var(--line-2);
   color: var(--ink);
   border-radius: var(--r-1);
   padding: 9px 11px;
+  min-height: 34px;
   font: inherit;
   font-size: 12.5px;
-  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.25), inset 0 -1px 0 var(--spec);
   transition: border-color var(--fast) var(--ease), background var(--fast) var(--ease),
     box-shadow var(--fast) var(--ease);
 }
 
-input::placeholder { color: var(--ink-3); }
+input::placeholder,
+textarea::placeholder { color: var(--ink-4); }
 
 input[type="text"]:hover,
 input[type="password"]:hover,
 input[type="number"]:hover,
 input[type="url"]:hover,
-select:hover { border-color: var(--edge-2); }
+select:hover { border-color: var(--line-3); }
 
 input[type="text"]:focus-visible,
 input[type="password"]:focus-visible,
 input[type="number"]:focus-visible,
 input[type="url"]:focus-visible,
-select:focus-visible {
-  outline-offset: 0;
-  border-color: transparent;
-  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.25),
-    inset 0 0 0 1px color-mix(in srgb, var(--accent) 60%, transparent);
+select:focus-visible,
+textarea:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
 /* Numbers typed into a field are still numbers: they line up. */
@@ -622,9 +640,10 @@ input[type="number"] { font-variant-numeric: tabular-nums; }
 
 select {
   appearance: none;
-  padding-right: 32px;
-  background-image: linear-gradient(45deg, transparent 50%, var(--ink-2) 50%),
-    linear-gradient(135deg, var(--ink-2) 50%, transparent 50%);
+  padding-right: 30px;
+  cursor: pointer;
+  background-image: linear-gradient(45deg, transparent 50%, var(--ink-3) 50%),
+    linear-gradient(135deg, var(--ink-3) 50%, transparent 50%);
   background-position: calc(100% - 16px) calc(50% + 1px), calc(100% - 11px) calc(50% + 1px);
   background-size: 5px 5px, 5px 5px;
   background-repeat: no-repeat;
@@ -636,32 +655,26 @@ input[type="checkbox"] {
   height: 16px;
   flex: none;
   margin: 0;
-  border: 1px solid var(--edge-2);
+  border: 1px solid var(--line-3);
   border-radius: 5px;
   background: var(--well);
-  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.3);
   display: inline-grid;
   place-content: center;
   cursor: pointer;
-  transition: background var(--fast) var(--ease), border-color var(--fast) var(--ease),
-    box-shadow var(--fast) var(--ease);
+  transition: background var(--fast) var(--ease), border-color var(--fast) var(--ease);
 }
 input[type="checkbox"]::after {
   content: "";
   width: 8px;
   height: 5px;
-  border: 1.7px solid var(--accent-ink);
+  border: 1.8px solid var(--solid-ink);
   border-top: 0;
   border-right: 0;
   transform: rotate(-45deg) translate(0.5px, -1px) scale(0.5);
   opacity: 0;
   transition: opacity var(--fast) var(--ease), transform var(--base) var(--spring);
 }
-input[type="checkbox"]:checked {
-  background: linear-gradient(170deg, var(--accent), var(--accent-2));
-  border-color: color-mix(in srgb, var(--accent) 70%, transparent);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45), 0 2px 10px -4px rgba(var(--accent-rgb), 0.7);
-}
+input[type="checkbox"]:checked { background: var(--solid); border-color: var(--solid); }
 input[type="checkbox"]:checked::after { opacity: 1; transform: rotate(-45deg) translate(0.5px, -1px) scale(1); }
 
 /* ---------------------------------------------------------------- *
@@ -671,19 +684,23 @@ input[type="checkbox"]:checked::after { opacity: 1; transform: rotate(-45deg) tr
 .status {
   margin: 0;
   font-size: 11.5px;
-  line-height: 1.45;
+  line-height: 1.5;
   color: var(--ink-2);
 }
 .status.error { color: var(--down); }
 
+/* ---------------------------------------------------------------- *
+ * Disclosure
+ * ---------------------------------------------------------------- */
+
 details > summary {
   cursor: pointer;
   list-style: none;
-  font-size: 11px;
+  font-size: 11.5px;
   color: var(--ink-3);
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: var(--s-2);
   padding: 4px 0;
   transition: color var(--fast) var(--ease);
 }
@@ -702,24 +719,42 @@ details[open] > summary::before { transform: rotate(45deg); }
 details > summary:hover { color: var(--ink); }
 
 /* ---------------------------------------------------------------- *
+ * Chips
+ * ---------------------------------------------------------------- */
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10.5px;
+  font-weight: 560;
+  letter-spacing: 0.01em;
+  padding: 3px 9px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+
+/* ---------------------------------------------------------------- *
  * Motion
  * ---------------------------------------------------------------- */
 
 @keyframes rise {
-  from { opacity: 0; transform: translateY(9px); }
+  from { opacity: 0; transform: translateY(8px); }
   to { opacity: 1; transform: none; }
 }
 
 @keyframes sweep {
-  0% { transform: translateX(-60%) scaleX(0.35); }
+  0% { transform: translateX(-100%) scaleX(0.4); }
   50% { transform: translateX(60%) scaleX(1); }
-  100% { transform: translateX(180%) scaleX(0.35); }
+  100% { transform: translateX(220%) scaleX(0.4); }
 }
 
 @keyframes pulse-ring {
-  0% { opacity: 0.7; transform: scale(0.6); }
-  70% { opacity: 0; transform: scale(1.9); }
-  100% { opacity: 0; transform: scale(1.9); }
+  0% { opacity: 0.75; transform: scale(0.7); }
+  70%, 100% { opacity: 0; transform: scale(1.9); }
 }
 
 @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
@@ -728,16 +763,16 @@ details > summary:hover { color: var(--ink); }
  * The staggered arrival.
  *
  * Panes come in as a sequence rather than all at once, which is what makes a
- * surface look assembled instead of pasted. Six steps covers every column in
+ * surface look assembled rather than pasted. Six steps covers every column in
  * the product; anything past the sixth arrives with it.
  */
 .stagger > * { animation: rise var(--base) var(--spring) both; }
-.stagger > *:nth-child(1) { animation-delay: 20ms; }
-.stagger > *:nth-child(2) { animation-delay: 60ms; }
-.stagger > *:nth-child(3) { animation-delay: 100ms; }
-.stagger > *:nth-child(4) { animation-delay: 140ms; }
-.stagger > *:nth-child(5) { animation-delay: 180ms; }
-.stagger > *:nth-child(n + 6) { animation-delay: 220ms; }
+.stagger > *:nth-child(1) { animation-delay: 15ms; }
+.stagger > *:nth-child(2) { animation-delay: 50ms; }
+.stagger > *:nth-child(3) { animation-delay: 85ms; }
+.stagger > *:nth-child(4) { animation-delay: 120ms; }
+.stagger > *:nth-child(5) { animation-delay: 155ms; }
+.stagger > *:nth-child(n + 6) { animation-delay: 190ms; }
 
 @media (prefers-reduced-motion: reduce) {
   *,
@@ -747,6 +782,7 @@ details > summary:hover { color: var(--ink); }
     animation-delay: 0ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 1ms !important;
+    scroll-behavior: auto !important;
   }
 }
 
@@ -754,12 +790,12 @@ details > summary:hover { color: var(--ink); }
  * Scrollbar
  * ---------------------------------------------------------------- */
 
-::-webkit-scrollbar { width: 11px; height: 11px; }
+::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb {
-  background: var(--edge-2);
-  border-radius: 99px;
+  background: var(--line-3);
+  border-radius: var(--r-pill);
   border: 3px solid transparent;
   background-clip: content-box;
 }
-::-webkit-scrollbar-thumb:hover { background: var(--ink-3); background-clip: content-box; }
+::-webkit-scrollbar-thumb:hover { background: var(--ink-4); background-clip: content-box; }

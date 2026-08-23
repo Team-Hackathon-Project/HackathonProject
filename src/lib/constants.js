@@ -132,6 +132,16 @@ export const OFFSCREEN_PATH = 'src/offscreen.html';
 /** The dashboard, as served from inside the extension bundle. */
 export const DASHBOARD_PATH = 'web/index.html';
 
+/**
+ * The setup guide, opened in a full tab the first time the extension is
+ * installed and from the popup and the settings page thereafter.
+ *
+ * It is a full page rather than a popup step for a reason: the popup is 400px
+ * wide and closes the moment focus leaves it, which is the worst possible
+ * place to ask someone to paste an API key.
+ */
+export const WELCOME_PATH = 'src/welcome.html';
+
 export const STORAGE_KEYS = {
   SELECTORS: 'selector_registry',
   SNAPSHOTS: 'snapshots',
@@ -205,6 +215,16 @@ export const DEFAULT_SETTINGS = {
   dashboardOrigin: '',
   /** Set once the watchlist has been back-filled from pre-existing snapshots. */
   watchlistSeeded: false,
+  /**
+   * Whether the setup guide has been walked to the end at least once.
+   *
+   * Nothing is gated on it — every surface works whether or not it is set. It
+   * decides two small things: whether the guide opens by itself on install,
+   * and whether the popup marks the button that reopens it.
+   */
+  onboardingCompleted: false,
+  /** The furthest step reached, so a guide left half-done resumes in place. */
+  onboardingStep: 0,
   /**
    * Background monitoring. Off until asked for: an extension that starts
    * fetching pages on a timer the moment it is installed, without the user

@@ -6,7 +6,7 @@
  * trip needed — except for the registry reset, which goes through the worker
  * so the reset is logged in one place.
  */
-import { MSG, DASHBOARD_PATH, BRIGHTDATA_MODES } from './lib/constants.js';
+import { MSG, DASHBOARD_PATH, WELCOME_PATH, BRIGHTDATA_MODES } from './lib/constants.js';
 import { normalizeBridgeUrl, bridgeOriginPattern, DEFAULT_BRIDGE_URL } from './lib/brightdata.js';
 import {
   getSettings, saveSettings, getPortfolio, savePosition, getRegistry, getHealLog, getWatchlist,
@@ -383,6 +383,7 @@ el('save-settings').addEventListener('click', async () => {
     maxSnippetChars: Number.isFinite(chars) ? Math.min(40000, Math.max(1000, chars)) : 12000,
   });
   await renderSettings();
+  await renderChecklist();
   shownProvider = el('provider').value;
   setDirty(false);
   setStatus(el('settings-status'), 'Settings saved.');
@@ -423,7 +424,87 @@ el('save-position').addEventListener('click', async () => {
   for (const id of ['pos-ticker', 'pos-shares', 'pos-cost', 'pos-buy', 'pos-sell']) el(id).value = '';
   el('pos-auto').checked = false;
   await renderPortfolio();
+  await renderChecklist();
   setStatus(el('position-status'), `Saved ${ticker}.`);
+});
+
+/* ------------------------------------------------------------------ *
+ * Getting started
+ *
+ * The panel the page opens on. It reports rather than asks: every row is a
+ * fact read back out of storage, so what is on screen is what is configured
+ * and not what some earlier screen intended to configure.
+ * ------------------------------------------------------------------ */
+
+/** One checklist row: a state mark, what it is, and the reading on the right. */
+function checkRow({ done, title, detail, value }) {
+  const item = document.createElement('li');
+  item.dataset.done = done ? 'true' : 'false';
+
+  const state = document.createElement('span');
+  state.className = 'check-state';
+
+  const text = document.createElement('div');
+  text.className = 'check-text';
+  const heading = document.createElement('b');
+  heading.textContent = title;
+  const sub = document.createElement('span');
+  sub.textContent = detail;
+  text.append(heading, sub);
+
+  const reading = document.createElement('span');
+  reading.className = 'check-value';
+  reading.textContent = value;
+
+  item.append(state, text, reading);
+  return item;
+}
+
+async function renderChecklist() {
+  const stored = await getSettings();
+  const provider = providerFor(stored.provider);
+  const key = (stored.providers[provider.id] || {}).apiKey || '';
+  const watched = Object.keys(await getWatchlist());
+  const positions = Object.keys(await getPortfolio());
+
+  el('checklist').replaceChildren(
+    checkRow({
+      done: Boolean(key),
+      title: key ? 'A model is connected' : 'Running on the local rules',
+      detail: key
+        ? 'Selector repair and written rationales are available.'
+        : 'Verdicts come from your targets and price history. Nothing is sent anywhere.',
+      value: key ? provider.label : 'no key',
+    }),
+    checkRow({
+      done: watched.length > 0,
+      title: watched.length ? 'Watchlist started' : 'Nothing watched yet',
+      detail: watched.length
+        ? 'These appear on the dashboard and can be refreshed on a timer.'
+        : 'Scan any quote page from the toolbar and it lands on the watchlist by itself.',
+      value: watched.length ? `${watched.length} ticker${watched.length === 1 ? '' : 's'}` : '—',
+    }),
+    checkRow({
+      done: positions.length > 0,
+      title: positions.length ? 'Targets set' : 'No targets yet',
+      detail: positions.length
+        ? 'A buy and a sell level are what turn a quote into a signal.'
+        : 'Without targets every verdict falls back to the price trend alone.',
+      value: positions.length ? `${positions.length} position${positions.length === 1 ? '' : 's'}` : '—',
+    }),
+    checkRow({
+      done: Boolean(stored.monitorEnabled),
+      title: stored.monitorEnabled ? 'Background checks on' : 'Background checks off',
+      detail: stored.monitorEnabled
+        ? 'Watched tickers are re-read on a timer and alerts are raised for you.'
+        : 'Nothing is fetched unless you ask. Switch it on from the dashboard.',
+      value: stored.monitorEnabled ? `every ${stored.monitorIntervalMinutes} min` : 'off',
+    })
+  );
+}
+
+el('open-guide').addEventListener('click', async () => {
+  await chrome.tabs.create({ url: chrome.runtime.getURL(WELCOME_PATH) });
 });
 
 /* ------------------------------------------------------------------ *
@@ -810,7 +891,8 @@ function setupTabs() {
 
 (async function init() {
   await Promise.all([
-    renderSettings(), renderPortfolio(), renderRegistry(), renderHealLog(), renderAccess(), renderBrightdata(),
+    renderSettings(), renderPortfolio(), renderRegistry(), renderHealLog(), renderAccess(),
+    renderBrightdata(), renderChecklist(),
   ]);
   shownProvider = el('provider').value;
   setupTabs();

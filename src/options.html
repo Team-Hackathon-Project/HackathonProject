@@ -12,7 +12,7 @@
 
     <div class="shell">
       <aside class="sidebar">
-        <div class="sidebar-inner pane">
+        <div class="sidebar-inner">
           <div class="brand">
             <span class="mark" aria-hidden="true">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
@@ -32,7 +32,15 @@
             and the word is what confirms it.
           -->
           <nav class="nav" aria-label="Settings sections">
-            <a href="#dashboard" class="nav-link is-active">
+            <a href="#start" class="nav-link is-active">
+              <span class="nav-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M12 3.2 14.6 9l6.4.6-4.8 4.2 1.4 6.2L12 16.8 6.4 20l1.4-6.2L3 9.6 9.4 9z" />
+                </svg>
+              </span>
+              <span>Getting started</span>
+            </a>
+            <a href="#dashboard" class="nav-link">
               <span class="nav-icon" aria-hidden="true">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
                   <rect x="3" y="3" width="7.5" height="8.5" rx="1.8" />
@@ -110,7 +118,7 @@
       </aside>
 
       <main>
-        <header class="page-head pane">
+        <header class="page-head">
           <div class="page-head-text">
             <p class="eyebrow">Market Advisory Engine</p>
             <h1>Settings</h1>
@@ -119,7 +127,41 @@
         </header>
 
         <!-- ---------------------------------------------------------- -->
-        <section id="dashboard" class="panel stagger is-active" aria-labelledby="dashboard-title">
+        <section id="start" class="panel stagger is-active" aria-labelledby="start-title">
+          <div class="panel-head">
+            <h2 id="start-title">Getting started</h2>
+            <p class="panel-sub">Where the setup stands right now, read back from what is actually stored.</p>
+          </div>
+
+          <ul id="checklist" class="checklist pane"></ul>
+
+          <div class="settings pane">
+            <div class="setting">
+              <div class="setting-text">
+                <span class="setting-label">The setup guide</span>
+                <p class="hint">Five steps: what this is, how the loop works, which engine answers, your first ticker, and where to go next. Nothing in it is mandatory.</p>
+              </div>
+              <div class="setting-control">
+                <button id="open-guide" class="btn primary small" type="button">Open the guide</button>
+              </div>
+            </div>
+          </div>
+
+          <details class="note pane">
+            <summary>What the extension does on its own, and what it never does</summary>
+            <p>
+              On its own: reads the tab you point it at, repairs a selector when a page changes, and — only
+              once you switch background checks on — re-reads the tickers you are watching on a timer.
+            </p>
+            <p>
+              Never: places an order, contacts a broker, sends your key anywhere but the provider you chose,
+              or syncs anything off this machine.
+            </p>
+          </details>
+        </section>
+
+        <!-- ---------------------------------------------------------- -->
+        <section id="dashboard" class="panel stagger" aria-labelledby="dashboard-title" hidden>
           <div class="panel-head">
             <h2 id="dashboard-title">Dashboard</h2>
             <p class="panel-sub">Every ticker you are watching, on one page.</p>
