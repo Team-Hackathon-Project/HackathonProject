@@ -447,14 +447,18 @@
               <div class="setting-text">
                 <label for="bd-ticker">Read one now</label>
                 <p class="hint">
-                  A real session through the Scraping Browser, repairs and all. Takes 20&ndash;35 seconds and
-                  spends Bright Data minutes. The result is stored exactly as a tab scan would be.
+                  Two routes, both through the agent. <strong>Scraping Browser</strong> drives a real remote
+                  Chrome with our own selectors and repairs, in 20&ndash;35 seconds.
+                  <strong>Scraper Studio</strong> runs the collector you published in Bright Data's IDE on their
+                  infrastructure and returns a row &mdash; no page is read here at all. Either way the result is
+                  stored exactly as a tab scan would be.
                 </p>
               </div>
               <div class="setting-control">
                 <input id="bd-ticker" type="text" placeholder="AAPL" maxlength="10" autocomplete="off" spellcheck="false" />
                 <div class="button-row">
-                  <button id="bd-scrape" class="btn ghost small" type="button">Scrape now</button>
+                  <button id="bd-scrape" class="btn ghost small" type="button">Scraping Browser</button>
+                  <button id="bd-studio" class="btn ghost small" type="button">Scraper Studio</button>
                 </div>
               </div>
             </div>

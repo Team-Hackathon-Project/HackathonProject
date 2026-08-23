@@ -23,7 +23,8 @@
     "brightdata:check": "node agent/cli.mjs --check",
     "e2e:brightdata": "node e2e/brightdata.mjs",
     "studio": "node agent/studio-cli.mjs",
-    "studio:check": "node agent/studio-cli.mjs --check"
+    "studio:check": "node agent/studio-cli.mjs --check",
+    "e2e:studio": "node e2e/studio-extension.mjs"
   },
   "dependencies": {
     "jsdom": "^30.0.1",

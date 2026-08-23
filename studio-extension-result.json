@@ -1,0 +1,86 @@
+{
+  "ran_at": "2026-08-23T16:06:47.200Z",
+  "answer": {
+    "snapshot": {
+      "ticker": "AAPL",
+      "current_price": 309.35,
+      "currency": "USD",
+      "change_percentage": "-0.63%",
+      "change_value": -1.95,
+      "volume": 48591535,
+      "news": [
+        "Apple cutting hundreds more jobs in shift toward AI",
+        "Apple (AAPL) Lays Off Over 200 Employees as It Refocuses on AI and New Devices",
+        "Apple cutting jobs in multiple departments, Bloomberg reports",
+        "Walmart Stock (WMT) Slides Despite Finally Giving Green Light to Apple Pay and Google Pay",
+        "Apple paid 40% of its global taxes to Ireland in last fiscal year"
+      ],
+      "extracted_at": "2026-08-23T16:06:47.180Z",
+      "source_url": "https://stockanalysis.com/stocks/aapl/",
+      "selectors_used": {},
+      "method": "scraper-studio"
+    },
+    "snapshots": [
+      {
+        "ticker": "AAPL",
+        "current_price": 309.35,
+        "currency": "USD",
+        "change_percentage": "-0.63%",
+        "change_value": -1.95,
+        "volume": 48591535,
+        "news": [
+          "Apple cutting hundreds more jobs in shift toward AI",
+          "Apple (AAPL) Lays Off Over 200 Employees as It Refocuses on AI and New Devices",
+          "Apple cutting jobs in multiple departments, Bloomberg reports",
+          "Walmart Stock (WMT) Slides Despite Finally Giving Green Light to Apple Pay and Google Pay",
+          "Apple paid 40% of its global taxes to Ireland in last fiscal year"
+        ],
+        "extracted_at": "2026-08-23T16:06:47.180Z",
+        "source_url": "https://stockanalysis.com/stocks/aapl/",
+        "selectors_used": {},
+        "method": "scraper-studio"
+      }
+    ],
+    "usable": true,
+    "method": "scraper-studio",
+    "collector": "c_mt5eiyxpq0ed8wn9v",
+    "collection_id": "j_mt6022v2x0fytbxyi",
+    "unusable": 0,
+    "healed": [],
+    "warnings": [],
+    "targets": null,
+    "duration_ms": 16066
+  },
+  "stored": {
+    "snapshot": {
+      "change_percentage": "-0.63%",
+      "change_value": -1.95,
+      "currency": "USD",
+      "current_price": 309.35,
+      "extracted_at": "2026-08-23T16:06:47.180Z",
+      "method": "scraper-studio",
+      "news": [
+        "Apple cutting hundreds more jobs in shift toward AI",
+        "Apple (AAPL) Lays Off Over 200 Employees as It Refocuses on AI and New Devices",
+        "Apple cutting jobs in multiple departments, Bloomberg reports",
+        "Walmart Stock (WMT) Slides Despite Finally Giving Green Light to Apple Pay and Google Pay",
+        "Apple paid 40% of its global taxes to Ireland in last fiscal year"
+      ],
+      "selectors_used": {},
+      "source_url": "https://stockanalysis.com/stocks/aapl/",
+      "ticker": "AAPL",
+      "volume": 48591535
+    },
+    "watch": {
+      "added_at": "2026-08-23T16:06:47.196Z",
+      "last_error": null,
+      "last_method": "scraper-studio",
+      "last_refreshed_at": "2026-08-23T16:06:47.180Z",
+      "monitor": true,
+      "needs_permission": null,
+      "source_url": "https://stockanalysis.com/stocks/aapl/",
+      "ticker": "AAPL"
+    },
+    "history": 1
+  }
+}

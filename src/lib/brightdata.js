@@ -262,6 +262,11 @@ export function bridgeRoutes(origin) {
     health: `${base}/health`,
     scrape: `${base}/scrape`,
     registry: `${base}/registry`,
+    // Scraper Studio: a collector published in Bright Data's IDE, run on their
+    // infrastructure. The bridge fronts it for the same reason it fronts the
+    // Scraping Browser — the credentials belong on the agent's side, not in a
+    // browser extension.
+    studio: `${base}/studio`,
   };
 }
 

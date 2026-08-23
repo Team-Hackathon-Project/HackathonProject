@@ -12,7 +12,7 @@
 import {
   MSG, OFFSCREEN_TARGET, OFFSCREEN_PATH, FIELDS, SNIPPET_LIMIT, FIELD_LABELS, FIELD_PHRASES, HEALABLE_FIELDS,
   EXTERNAL_ALLOWED, REFRESH_FETCH_TIMEOUT_MS, REFRESH_TAB_TIMEOUT_MS, REFRESH_GAP_MS,
-  REFRESH_BRIDGE_TIMEOUT_MS, BRIDGE_PROBE_TIMEOUT_MS, BRIGHTDATA_MODES,
+  REFRESH_BRIDGE_TIMEOUT_MS, BRIDGE_PROBE_TIMEOUT_MS, BRIGHTDATA_MODES, STUDIO_TIMEOUT_MS,
   MONITOR_ALARM, MIN_MONITOR_MINUTES, MAX_MONITOR_MINUTES, DASHBOARD_PATH, WELCOME_PATH,
 } from './lib/constants.js';
 import { normalizeBridgeUrl, bridgeRoutes, bridgeOriginPattern, BRIDGE_PROTOCOL } from './lib/brightdata.js';
@@ -1502,6 +1502,68 @@ export async function handleRequest(message) {
         notices: answer.notices || [],
         captcha: answer.captcha || null,
         host: answer.host || hostOf(url),
+        targets,
+        duration_ms: answer.duration_ms || null,
+      };
+    }
+    case MSG.SCRAPE_VIA_STUDIO: {
+      // Bright Data Scraper Studio: the collector is authored and published in
+      // their IDE and runs on their infrastructure, so nothing here reads a
+      // page at all — the extension names a ticker and receives a row. It goes
+      // through the agent because the API token belongs on that side.
+      const settings = await getSettings();
+      const bridge = bridgeSettings(settings);
+      if (!bridge.enabled) throw new Error('Bright Data is switched off in the extension options.');
+      if (!(await hasBridgeAccess(bridge))) {
+        const error = new Error(`Access to ${bridge.origin} has not been granted yet. Grant it on the options page.`);
+        error.needsPermission = bridgeOriginPattern(bridge.origin);
+        throw error;
+      }
+
+      const payload = message.payload || {};
+      const symbol = tickerOf(payload.ticker);
+      const url = String(payload.url || '').trim();
+      if (!symbol && !url) throw new Error('A ticker or a quote page URL is required.');
+
+      const answer = await callBridge(bridge, bridge.routes.studio, {
+        method: 'POST',
+        timeoutMs: STUDIO_TIMEOUT_MS,
+        body: symbol ? { tickers: [symbol] } : { urls: [url] },
+      });
+      if (!answer || !answer.ok || !Array.isArray(answer.snapshots) || !answer.snapshots.length) {
+        throw new Error((answer && answer.error) || 'The collector returned no usable rows.');
+      }
+
+      // A collector row is a reading like any other: same storage, same
+      // watchlist entry, same automatic targets.
+      const stored = [];
+      let targets = null;
+      for (const snapshot of answer.snapshots) {
+        if (!isUsableSnapshot(snapshot)) continue;
+        await saveSnapshot(snapshot);
+        await recordPricePoint(snapshot);
+        await saveWatchEntry(snapshot.ticker, {
+          source_url: snapshot.source_url || null,
+          last_refreshed_at: snapshot.extracted_at,
+          last_method: 'scraper-studio',
+          last_error: null,
+          needs_permission: null,
+        });
+        targets = (await refreshAutoTargets(snapshot)) || targets;
+        stored.push(snapshot);
+      }
+      if (!stored.length) throw new Error('The collector answered, but no row carried both a ticker and a price.');
+
+      return {
+        snapshot: stored[0],
+        snapshots: stored,
+        usable: true,
+        method: 'scraper-studio',
+        collector: answer.collector || null,
+        collection_id: answer.collection_id || null,
+        unusable: (answer.unusable || []).length,
+        healed: [],
+        warnings: [],
         targets,
         duration_ms: answer.duration_ms || null,
       };

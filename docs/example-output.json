@@ -1,0 +1,153 @@
+{
+  "_comment": [
+    "Real output, captured on 2026-08-23. Nothing here is hand-written or edited.",
+    "Reproduce it with:  npm run studio -- AAPL     (the collector, at a terminal)",
+    "                    npm run e2e:studio         (the same collector, driven by the extension)",
+    "                    npm run e2e                (a tab scan, no Bright Data involved)"
+  ],
+
+  "scraper_studio_collector_row": {
+    "_comment": "One row exactly as the published Bright Data Scraper Studio collector returns it. Collector c_mt5eiyxpq0ed8wn9v, snapshot j_mt6022v2x0fytbxyi.",
+    "ticker": "AAPL",
+    "current_price": 309.35,
+    "currency": "USD",
+    "change_percentage": "-0.63%",
+    "change_value": -1.95,
+    "volume": 48591535,
+    "news": [
+      "Apple cutting hundreds more jobs in shift toward AI",
+      "Apple (AAPL) Lays Off Over 200 Employees as It Refocuses on AI and New Devices",
+      "Apple cutting jobs in multiple departments, Bloomberg reports",
+      "Walmart Stock (WMT) Slides Despite Finally Giving Green Light to Apple Pay and Google Pay",
+      "Apple paid 40% of its global taxes to Ireland in last fiscal year"
+    ],
+    "source_url": "https://stockanalysis.com/stocks/aapl/"
+  },
+
+  "snapshot": {
+    "_comment": "The canonical shape everything downstream reads. A collector row and a tab scan both normalize to this, which is why the two are interchangeable. `method` records which route produced it; `selectors_used` is empty for a collector row because no DOM was read on this machine.",
+    "ticker": "AAPL",
+    "current_price": 309.35,
+    "currency": "USD",
+    "change_percentage": "-0.63%",
+    "change_value": -1.95,
+    "volume": 48591535,
+    "news": [
+      "Apple cutting hundreds more jobs in shift toward AI",
+      "Apple (AAPL) Lays Off Over 200 Employees as It Refocuses on AI and New Devices"
+    ],
+    "extracted_at": "2026-08-23T16:05:56.487Z",
+    "source_url": "https://stockanalysis.com/stocks/aapl/",
+    "selectors_used": {},
+    "method": "scraper-studio"
+  },
+
+  "snapshot_from_a_tab_scan": {
+    "_comment": "The same shape from the other route. Here the page was read in the browser, so every number carries the DOM hook that produced it — that map is the audit trail shown under 'Selectors used' in the popup.",
+    "ticker": "AAPL",
+    "current_price": 309.35,
+    "currency": "USD",
+    "change_percentage": "-0.63%",
+    "change_value": -0.63,
+    "volume": 48591535,
+    "news": [
+      "Apple cutting hundreds more jobs in shift toward AI"
+    ],
+    "extracted_at": "2026-08-23T07:19:50.661Z",
+    "source_url": "https://stockanalysis.com/stocks/aapl/",
+    "selectors_used": {
+      "ticker_selector": "main h1",
+      "price_selector": ".text-4xl",
+      "change_percentage_selector": ".mb-5 > .max-w-\\[50\\%\\] > div:nth-child(2)",
+      "volume_selector": "//td[normalize-space(.)=\"Volume\"]/following-sibling::td[1]",
+      "news_selector": "[class*=\"news\" i] a[href]"
+    },
+    "method": "tab"
+  },
+
+  "advisory": {
+    "_comment": "What the engine proposes. `user_action_required` is always true — the extension has no path to a broker, and this object is a suggestion until a person confirms it.",
+    "ticker": "AAPL",
+    "action": "HOLD",
+    "confidence_score": 0.4,
+    "rationale": "AAPL trades at $309.35, down 0.63% with volume 48.59M. You hold no shares and have no buy-or-sell targets set, so there is insufficient guidance to act. Given the modest decline and lack of user-defined thresholds, a neutral HOLD is advised.",
+    "user_action_required": true,
+    "source": "llm",
+    "provider": "groq",
+    "provider_label": "Groq (OpenAI-compatible)",
+    "model": "openai/gpt-oss-120b",
+    "generated_at": "2026-08-23T07:20:02.118Z"
+  },
+
+  "decision": {
+    "_comment": "What is written when the person confirms. `executed: false` is not a placeholder for a later true — no code sets it, because nothing is ever executed.",
+    "ticker": "AAPL",
+    "suggested_action": "HOLD",
+    "final_action": "HOLD",
+    "verdict": "APPROVED",
+    "confidence_score": 0.4,
+    "price": 309.35,
+    "currency": "USD",
+    "rationale": "AAPL trades at $309.35, down 0.63% with volume 48.59M...",
+    "advice_source": "llm",
+    "note": null,
+    "decided_at": "2026-08-23T07:20:31.004Z",
+    "executed": false
+  },
+
+  "healed_selector_registry": {
+    "_comment": "What the repair loop learned, keyed by host and field. A selector only lands here after the model proposed it, it resolved on the live page, and the value it returned fit the field.",
+    "stockanalysis.com": {
+      "change_percentage": {
+        "selector": ".mb-5 > .max-w-\\[50\\%\\] > div:nth-child(2)",
+        "strategy": "css",
+        "confidence": 0.9,
+        "source": "healed",
+        "healed_at": "2026-08-23T07:19:48.226Z"
+      }
+    }
+  },
+
+  "repair_log_entries": [
+    {
+      "_comment": "An accepted repair. `reason` is the model's own words, kept so a person can judge the fix rather than trust it.",
+      "field": "change_percentage",
+      "host": "stockanalysis.com",
+      "at": "2026-08-23T07:19:48.226Z",
+      "attempt": 1,
+      "healed": true,
+      "provider": "groq",
+      "proposed": ".mb-5 > .max-w-\\[50\\%\\] > div:nth-child(2)",
+      "strategy": "css",
+      "confidence": 0.9,
+      "reason": "Div showing the regular-market change \"-1.95 (-0.63%)\" which includes the percentage",
+      "value": "-1.95 (-0.63%)"
+    },
+    {
+      "_comment": "A refused one, from a run where the model proposed the price node for the volume field. It resolved, and was still wrong — so it never reached the registry.",
+      "field": "volume",
+      "host": "localhost:8731",
+      "at": "2026-08-21T03:28:08.717Z",
+      "attempt": 1,
+      "healed": false,
+      "provider": "groq",
+      "proposed": ".qz-8f31ab",
+      "strategy": "css",
+      "confidence": 0.93,
+      "reason": "The live value node carries the hashed class.",
+      "error": "selector matched, but \"$182.44\" is not a valid volume"
+    }
+  ],
+
+  "suggested_targets": {
+    "_comment": "Arithmetic on the user's own data — scan history first, then their approved BUY decisions, then cost basis. No model is asked what a stock is worth.",
+    "ticker": "NVDA",
+    "target_buy_below": 92.93,
+    "target_sell_above": 107.07,
+    "anchor": 100,
+    "band": 0.07,
+    "basis": "history",
+    "sample_size": 5,
+    "note": "Anchored on 5 scans averaging 100, with a 7.1% band from the 7.1% spread of those scans."
+  }
+}

@@ -821,6 +821,32 @@ el('bd-scrape').addEventListener('click', async () => {
   await Promise.all([renderRegistry(), renderHealLog()]);
 });
 
+el('bd-studio').addEventListener('click', async () => {
+  const ticker = el('bd-ticker').value.trim().toUpperCase();
+  if (!/^[A-Z][A-Z0-9.\-]{0,9}$/.test(ticker)) {
+    setStatus(el('bd-status'), 'Enter a ticker to collect, such as AAPL.', true);
+    return;
+  }
+  if (brightdataDirty) {
+    setStatus(el('bd-status'), 'Save the settings first — the worker reads them from storage, not from this form.', true);
+    return;
+  }
+  setStatus(el('bd-status'), `Queuing ${ticker} with the Scraper Studio collector — it runs on Bright Data's side…`);
+  const response = await chrome.runtime.sendMessage({ type: MSG.SCRAPE_VIA_STUDIO, payload: { ticker } });
+  if (!response || !response.ok) {
+    setStatus(el('bd-status'), (response && response.error) || 'The collector run failed.', true);
+    return;
+  }
+  const { snapshot, collection_id: snapshotId, duration_ms: took } = response.data;
+  const job = snapshotId ? ` (snapshot ${snapshotId})` : '';
+  setStatus(
+    el('bd-status'),
+    `${snapshot.ticker} at ${snapshot.current_price} ${snapshot.currency} from the collector in `
+    + `${Math.round((took || 0) / 1000)}s${job}.`
+  );
+  el('bd-ticker').value = '';
+});
+
 el('bd-ticker').addEventListener('keydown', (event) => {
   if (event.key === 'Enter') el('bd-scrape').click();
 });

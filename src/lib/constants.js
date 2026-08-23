@@ -22,6 +22,9 @@ export const MSG = {
   TEST_BRIDGE: 'TEST_BRIDGE',
   // popup/dashboard -> background: read this ticker through Bright Data
   SCRAPE_VIA_BRIDGE: 'SCRAPE_VIA_BRIDGE',
+  // popup/dashboard -> background: collect this ticker with the Scraper Studio
+  // collector instead of reading a page ourselves
+  SCRAPE_VIA_STUDIO: 'SCRAPE_VIA_STUDIO',
   // dashboard -> background
   GET_DASHBOARD_STATE: 'GET_DASHBOARD_STATE',
   GET_PRICE_HISTORY: 'GET_PRICE_HISTORY',
@@ -287,6 +290,13 @@ export const REFRESH_TAB_TIMEOUT_MS = 15000;
  * timeout is 120s, so this has to sit above it or the worker gives up on a
  * scrape that is about to succeed.
  */
+/**
+ * A Scraper Studio run queues a job on Bright Data's infrastructure and waits
+ * for it to finish, which is minutes rather than seconds — a page fetch timeout
+ * would abandon a job that was still working.
+ */
+export const STUDIO_TIMEOUT_MS = 300000;
+
 export const REFRESH_BRIDGE_TIMEOUT_MS = 180000;
 
 /** The options page's connectivity probe, which only reads /health. */

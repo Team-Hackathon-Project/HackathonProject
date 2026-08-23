@@ -15,6 +15,75 @@ knowledge assumed. Three companion documents go deeper:
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Why each part is built the way it is — the design reasoning, data shapes, security model, and what has been verified |
 | [docs/DEMO.md](docs/DEMO.md) | A three-minute demo script with screenshots |
 | [docs/SCRAPER-STUDIO.md](docs/SCRAPER-STUDIO.md) | Creating the Bright Data collector, step by step |
+| [docs/example-output.json](docs/example-output.json) | Real captured output at every stage: collector row, snapshot, advisory, decision, repair log |
+
+---
+
+## How Bright Data Scraper Studio is used
+
+The custom scraper is a **collector authored and published in Bright Data
+Scraper Studio** — collector id `c_mt5eiyxpq0ed8wn9v` — not one of the
+pre-built scrapers from their library. It takes a quote-page URL and returns
+`ticker`, `current_price`, `currency`, `change_percentage`, `change_value`,
+`volume`, `news` and `source_url`.
+
+It is wired into the product, not bolted alongside it. Three routes reach the
+same collector:
+
+| Route | How |
+| --- | --- |
+| **The extension** | Settings → Bright Data → **Scraper Studio**. The service worker asks the local agent, the agent runs the collector, and the row is stored exactly as a tab scan would be — same snapshot, same watchlist entry, same automatic targets. |
+| **The agent bridge** | `POST /studio` with `{ "tickers": ["AAPL"] }` |
+| **A terminal** | `npm run studio -- AAPL MSFT` |
+
+```
+POST https://api.brightdata.com/dca/trigger?collector=<id>&queue_next=1
+     -> { "collection_id": "j_…" }        the snapshot id, kept for traceability
+GET  https://api.brightdata.com/dca/dataset?id=<snapshot id>
+     -> a progress object while it builds, the rows when it finishes
+```
+
+`npm run e2e:studio` proves the whole path in a real browser against the real
+collector, with nothing stubbed: it launches the extension, asks it to collect
+`AAPL` through Studio, and checks the row reached `chrome.storage.local` marked
+`last_method: "scraper-studio"`. A verified run:
+
+```
+[studio-ext] PASS: AAPL at 309.35 USD via scraper-studio
+[studio-ext]       collector c_mt5eiyxpq0ed8wn9v · snapshot j_mt6022v2x0fytbxyi · 16s
+[studio-ext]   ok   the row is stored as a snapshot
+[studio-ext]   ok   it is marked as coming from the collector
+[studio-ext]   ok   it appends to the price history
+```
+
+Setup — creating the collector inside a Bright Data account, which cannot be
+done from this repository — is in
+[docs/SCRAPER-STUDIO.md](docs/SCRAPER-STUDIO.md).
+
+## Scope of what is scraped
+
+Public quote pages only: Yahoo Finance, stockanalysis.com, MarketWatch, Google
+Finance, or whatever public page you point it at. Nothing here reads
+login-protected, paywalled, personal or otherwise restricted data, and no
+government website is scraped or supported. In the browser the extension can
+only read a tab **after you click its icon** — there are no declared content
+scripts and no standing access to any site.
+
+## AI assistance, disclosed
+
+This project was built with an AI coding assistant (Claude, via Claude Code).
+Its use is recorded rather than implied: every commit it contributed to carries
+a `Co-Authored-By: Claude Opus 5` trailer, so `git log` shows exactly which work
+it touched.
+
+The reasoning is ours, and it is written down. The commit messages explain why
+each decision was made, and several record faults found by running the thing
+rather than by generating more of it — a repair loop that was sending the model
+an advertisement because the container anchor picked a ticker chip inside an ad
+slot; a `"n/a"` parsing to a price of `0`; a `protocolTimeout` set to the
+connect budget so a 120-second navigation was cut off at 60. Those are in
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and in the history, because the
+verification is the part worth showing.
 
 - [What it is](#what-it-is)
 - [Install it](#install-it)
@@ -348,6 +417,7 @@ npm run e2e:targets    # target suggestion across repeated scans
 npm run e2e:dashboard  # the dashboard, both routes
 npm run e2e:live       # a real repair and advisory, using your key
 npm run e2e:provider   # does the configured key and model answer?
+npm run e2e:studio     # the extension collecting through the real Scraper Studio collector
 
 # Bright Data — these reach real services
 npm run brightdata:check

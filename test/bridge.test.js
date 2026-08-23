@@ -79,16 +79,34 @@ function scrapeAnswer(overrides = {}) {
  * Anything that is not the bridge is served the healthy quote page, so the
  * plain-fetch route stays available in the tests that need it to win.
  */
-function stubBridgeFetch({ health = null, scrape = scrapeAnswer(), page = HEALTHY_PAGE, fail = null } = {}) {
+function studioAnswer(overrides = {}) {
+  return {
+    ok: true,
+    method: 'scraper-studio',
+    collector: 'c_test123',
+    collection_id: 'j_test456',
+    snapshots: [{ ...SNAPSHOT, method: 'scraper-studio' }],
+    unusable: [],
+    duration_ms: 18000,
+    ...overrides,
+  };
+}
+
+function stubBridgeFetch({ health = null, scrape = scrapeAnswer(), studio = studioAnswer(), page = HEALTHY_PAGE, fail = null } = {}) {
   const calls = [];
   const impl = async (url, init = {}) => {
     const target = String(url);
     calls.push({ url: target, method: init.method || 'GET', body: init.body ? JSON.parse(init.body) : null, headers: init.headers || {} });
     if (target.startsWith(BRIDGE)) {
       if (fail) throw fail;
-      const body = target.endsWith('/health')
-        ? (health || { ok: true, service: 'brightdata-bridge', protocol: 1, tokenRequired: false, brightdata: { configured: true, zone: 'z1', description: 'zone z1' }, llm: {}, selfHealing: { available: true }, heals: [] })
-        : scrape;
+      let body;
+      if (target.endsWith('/health')) {
+        body = health || { ok: true, service: 'brightdata-bridge', protocol: 1, tokenRequired: false, brightdata: { configured: true, zone: 'z1', description: 'zone z1' }, llm: {}, selfHealing: { available: true }, heals: [] };
+      } else if (target.endsWith('/studio')) {
+        body = studio;
+      } else {
+        body = scrape;
+      }
       return { ok: true, status: 200, statusText: 'OK', async text() { return JSON.stringify(body); } };
     }
     if (page === null) return { ok: false, status: 404, async text() { return ''; } };
@@ -361,6 +379,66 @@ test('SCRAPE_VIA_BRIDGE records the reading the same way a tab scan does', async
   assert.equal(dump[STORAGE_KEYS.SNAPSHOTS].AAPL.current_price, 311.42);
   assert.equal(dump[STORAGE_KEYS.PRICE_HISTORY].AAPL.length, 1);
   assert.equal(dump[STORAGE_KEYS.WATCHLIST].AAPL.last_method, 'brightdata');
+});
+
+/* ------------------------------------------------------------------ *
+ * Scraper Studio — the collector, not a page read
+ * ------------------------------------------------------------------ */
+
+test('SCRAPE_VIA_STUDIO refuses while Bright Data is switched off', async () => {
+  setup({ brightdata: { enabled: false } });
+  const { handleRequest } = await background();
+
+  await assert.rejects(
+    () => handleRequest({ type: MSG.SCRAPE_VIA_STUDIO, payload: { ticker: 'AAPL' } }),
+    /switched off/,
+  );
+});
+
+test('SCRAPE_VIA_STUDIO stores a collector row exactly as a tab scan is stored', async () => {
+  const { storage, fetchImpl } = setup({ brightdata: { enabled: true } });
+  const { handleRequest } = await background();
+
+  const result = await handleRequest({ type: MSG.SCRAPE_VIA_STUDIO, payload: { ticker: 'AAPL' } });
+
+  assert.equal(result.usable, true);
+  assert.equal(result.method, 'scraper-studio');
+  assert.equal(result.collection_id, 'j_test456', 'the snapshot id comes back so a run is traceable');
+
+  // The collector is asked for a ticker; it does the page-reading, not us.
+  const call = fetchImpl.bridgeCalls().find((entry) => entry.url.endsWith('/studio'));
+  assert.equal(call.method, 'POST');
+  assert.deepEqual(call.body, { tickers: ['AAPL'] });
+
+  const dump = storage._dump();
+  assert.equal(dump[STORAGE_KEYS.SNAPSHOTS].AAPL.current_price, 311.42);
+  assert.equal(dump[STORAGE_KEYS.PRICE_HISTORY].AAPL.length, 1);
+  assert.equal(dump[STORAGE_KEYS.WATCHLIST].AAPL.last_method, 'scraper-studio');
+});
+
+test('a collector that returns nothing usable is reported, not stored', async () => {
+  const { storage } = setup({
+    brightdata: { enabled: true },
+    fetchImpl: stubBridgeFetch({ studio: studioAnswer({ snapshots: [], unusable: [{ index: 0, row: { ticker: 'AAPL' } }] }) }),
+  });
+  const { handleRequest } = await background();
+
+  await assert.rejects(
+    () => handleRequest({ type: MSG.SCRAPE_VIA_STUDIO, payload: { ticker: 'AAPL' } }),
+    /no usable rows/,
+  );
+  assert.equal((storage._dump()[STORAGE_KEYS.SNAPSHOTS] || {}).AAPL, undefined, 'nothing is stored from an empty run');
+});
+
+test('a web page cannot spend the collector budget either', async () => {
+  setup({ brightdata: { enabled: true } });
+  const { handleExternalRequest } = await background();
+
+  await assert.rejects(
+    () => handleExternalRequest({ type: MSG.SCRAPE_VIA_STUDIO, payload: { ticker: 'AAPL' } }),
+    /not available/,
+    'a collector run costs page loads on the team plan, and no dashboard control asks for it',
+  );
 });
 
 /* ------------------------------------------------------------------ *
