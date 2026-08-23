@@ -64,6 +64,15 @@ src/
     extract-core.js        Headless extraction, for HTML fetched without a browser
     alerts.js              Alert rules: target, percent, level, advisory flip
     providers.js           Anthropic and Groq wire formats, and the active-provider resolver
+    brightdata.js          Scraping Browser endpoint parsing, redaction, bridge address rules
+agent/                     The Bright Data half. Node, not the browser — see below.
+  config.mjs               Endpoint, geo pin, bridge and model credentials, all from .env
+  brightdata.mjs           The Scraping Browser session, and the content-script injection
+  healing.mjs              The self-healing loop, over a three-method page driver
+  scrape.mjs               One scrape end to end: open, extract, repair, verify, persist
+  registry.mjs             agent/state/registry.json — healed selectors, heal log, snapshots
+  server.mjs               The loopback bridge the extension calls (npm run agent)
+  cli.mjs                  The same scrape at a terminal (npm run brightdata)
 web/                       The dashboard. Served two ways from one codebase:
   index.html               inside the extension (chrome-extension://<id>/web/index.html)
   dashboard.css            and as a plain static site (npm run web)
@@ -87,10 +96,11 @@ e2e/
   live-quote.mjs           Real key, live page: a genuine repair and advisory
   auto-targets.mjs         Target suggestion across repeated scans, offline
   dashboard.mjs            The dashboard on both routes, and the external boundary
+  brightdata.mjs           The whole Bright Data path, against the real service
 docs/
   DEMO.md                  Three-minute demo script, with real screenshots
   env.mjs                  Reads the gitignored .env the runs take keys from
-test/                      197 tests: node:test + jsdom
+test/                      428 tests: node:test + jsdom
 ```
 
 ## The dashboard
@@ -129,13 +139,20 @@ cheaper:
 
 1. **Fetch the page and parse it.** Silent, fast, no tab appears. Works only on
    a server-rendered quote page.
-2. **Open it in a background tab and run the real content script.** Slower and
+2. **Read it through the Bright Data Scraping Browser.** A real Chrome somewhere
+   else, with a CAPTCHA solver and a pinned exit country, running the same
+   self-healing loop. Off until configured — see
+   [Bright Data Scraping Browser](#bright-data-scraping-browser) — and where it
+   sits in this order is a setting.
+3. **Open it in a background tab and run the real content script.** Slower and
    briefly visible in the tab strip, but it is a genuine render, so it works
    everywhere the popup does — including the self-healing repair path.
 
-The first is tried first and the second catches what it cannot read, which is
-most JavaScript-heavy finance sites. Both need you to have granted access to
-that host; see the security notes below. A ticker you add by symbol alone
+Route 1 is tried first and the rest catch what it cannot read, which is most
+JavaScript-heavy finance sites. Routes 1 and 3 read the page from *your*
+browser, so both need you to have granted access to that host; see the security
+notes below. Route 2 does not touch it at all — the agent's browser does — so it
+needs access to the agent instead, and can read a host you have never granted. A ticker you add by symbol alone
 defaults to `stockanalysis.com`, which renders server-side and so usually works
 by the fast path.
 
@@ -188,6 +205,132 @@ same as last time".
    match that looks like a value rather than a container.
 6. Only a selector that survives both is written to `chrome.storage.local` and
    used immediately — no page reload.
+
+## Bright Data Scraping Browser
+
+Some quote pages will not open for a browser extension. They geo-gate, they put
+a CAPTCHA in front of the price, they rate-limit one residential IP after a
+dozen reads, or they simply refuse a client that looks automated. `agent/` reads
+those pages through **Bright Data's Scraping Browser** — a real Chrome,
+somewhere else, driven over the DevTools Protocol — and runs the *identical*
+self-healing loop inside it.
+
+```bash
+cp .env.example .env          # paste the wss:// endpoint into BRIGHTDATA_BROWSER_URL
+npm run brightdata:check      # do the credentials work?
+npm run brightdata -- AAPL    # scrape one ticker, repairing whatever is broken
+npm run agent                 # serve it to the extension on 127.0.0.1:8791
+```
+
+### The endpoint, and the password that is not a password
+
+The Scraping Browser zone page gives you one line:
+
+```
+wss://brd-customer-<CUSTOMER ID>-zone-<ZONE NAME>:<PASSWORD>@brd.superproxy.io:9222
+```
+
+Copy it **after** pressing the reveal control. Until you do, the console prints
+the password as a row of asterisks, and that masked string copies perfectly
+cleanly — pasted into a config it fails with a bare authentication error, which
+sends you checking the zone name, the customer id, your plan and your firewall,
+i.e. everything except the thing that is wrong. The parser refuses it by name
+instead:
+
+> That password is the console's mask (a row of asterisks), not the password
+> itself. Reveal it on the Bright Data zone page, then copy the endpoint again.
+
+`BRIGHTDATA_AUTH` (the bare `user:password` pair Bright Data's own code samples
+use) and a `BRIGHTDATA_CUSTOMER` / `_ZONE` / `_PASSWORD` triple are both accepted
+as alternatives. The credentials never leave `.env`: they are not stored in the
+extension, not sent over the bridge, and every path that prints the endpoint —
+the CLI banner, `/health`, the options page — prints the redacted form.
+
+### Pin the exit country
+
+`BRIGHTDATA_COUNTRY=us` is not decoration. Without it the session leaves from
+wherever Bright Data has capacity, and the site serves what that country gets: a
+European exit node turns `google.com/finance` into `consent.google.com`, which
+has no quote on it at all. That failure is genuinely confusing, because the
+scraper is working perfectly and correctly reports that the page it reached has
+no price — so a redirect off the requested host is now detected and reported as
+itself, with the fix named:
+
+> the site redirected to consent.google.com, which is a consent page rather than
+> the quote — pin the session to a country that is not gated, with
+> BRIGHTDATA_COUNTRY in the agent's .env
+
+`BRIGHTDATA_CITY` and `BRIGHTDATA_STATE` work the same way.
+
+### Why the extension cannot do this itself
+
+It is not a design preference. That endpoint carries its credentials in the URL,
+and the HTML standard requires `new WebSocket()` to throw a `SyntaxError` when
+the URL "includes credentials". Chrome implements exactly that, and the
+WebSocket API exposes no request headers, so the `Authorization: Basic` route
+that Bright Data's C# sample takes is not available in a browser either. An MV3
+service worker is a page context and is bound by both rules.
+
+So the session runs in Node, where puppeteer-core can dial the endpoint
+directly, and the extension reaches it over a loopback HTTP bridge. Two things
+guard that bridge, because "it is only on localhost" is not a boundary — every
+page in your browser can reach localhost too:
+
+- **an origin allowlist** — only `chrome-extension://` and loopback origins get
+  a CORS preflight through, so a random site cannot spend your Bright Data hours
+  from a background tab;
+- **an optional shared token** (`BRIGHTDATA_BRIDGE_TOKEN`), checked on every
+  route. Worth setting.
+
+### It is the same self-healing loop, not a second one
+
+The agent does not carry its own extractor. It injects `src/content.js` — the
+extension's actual content script — into the remote page and calls the same
+three handlers the service worker calls in a real tab:
+
+| Message | What it does |
+| --- | --- |
+| `EXTRACT` | run the ordered selector candidates, return values and the containers for whatever missed |
+| `VALIDATE_SELECTOR` | run one proposed selector *in the live page* and report what it resolved to |
+| `CAPTURE_CONTAINER` | hand back the surrounding markup for one field |
+
+Injection goes through `Runtime.evaluate` rather than a `<script>` tag, because a
+`<script>` tag is subject to the target page's Content-Security-Policy and
+financial sites routinely ship one strict enough to drop it.
+
+Everything downstream is shared code: the same candidate order, the same
+sanitizer, the same prompt, the same `isPlausibleSelector` and `valueFitsField`
+refusals, the same one retry carrying the rejection back to the model, the same
+page-global-price check. A repair found out there is a repair the popup would
+have made — which is why it can simply be merged back in.
+
+### The registry is reconciled, not duplicated
+
+The agent keeps its healed selectors in `agent/state/registry.json`, because it
+has to work with no browser running at all. Every scrape carries the extension's
+registry out and the agent's back, and both sides merge on newest `healed_at`
+per host and field. So a selector repaired through Bright Data is one the popup
+already has the next time you scan that host, and it shows up in the same
+**Selectors** and **Repair log** tabs.
+
+### Using it from the extension
+
+Options → **Bright Data**. Set the agent's address, grant access to it, pick
+where it sits in the background-refresh order, and press **Test agent**:
+
+| Mode | Refresh order |
+| --- | --- |
+| `fallback` (default) | plain fetch → Bright Data → a local background tab |
+| `first` | Bright Data → plain fetch → a local background tab |
+| `only` | Bright Data, and report a failure rather than opening a tab |
+
+One consequence worth stating: the local routes read the quote page from *your*
+browser and so need that host's permission, while the Bright Data route never
+touches it — the agent's browser does. A host you have not granted is still
+readable that way, and `only` mode never opens a tab at all.
+
+The panel has no field for the Bright Data password, and never will: it belongs
+in the agent's `.env`, on the machine that dials the endpoint.
 
 ## Advisory & human-in-the-loop
 
@@ -310,11 +453,21 @@ Advisory output:
 - **Only a sanitized fragment leaves the browser** during a repair — the failing
   container, capped at a configurable character budget (12,000 by default), with
   scripts, styles, forms, and ad blocks removed.
+- **The Bright Data credentials never enter the extension.** They live in the
+  agent's gitignored `.env`, on the machine that dials the endpoint. The options
+  page has no field for them, `/health` returns the redacted endpoint, and the
+  parser refuses to put a password in an error message.
+- **The bridge is loopback, origin-checked and optionally token-checked.** Being
+  on `127.0.0.1` is not by itself a boundary, because every page in the browser
+  can reach `127.0.0.1` too — so the agent refuses a CORS preflight from any
+  origin that is not `chrome-extension://` or loopback, and refuses every request
+  without the shared token once `BRIGHTDATA_BRIDGE_TOKEN` is set. The extension
+  cannot reach it at all until you grant that origin from the options page.
 
 ## Commands
 
 ```bash
-npm run check     # static validation + the full test suite (330 tests)
+npm run check     # static validation + the full test suite (428 tests)
 npm run web       # serve the dashboard at http://localhost:8080
 npm run web:sync  # refresh web/vendor/ from src/ (the lint fails if it drifts)
 npm run package   # dist/self-healing-market-scraper-<version>.zip
@@ -324,6 +477,13 @@ npm run e2e:heal  # drive the repair loop against a mangled page, offline
 npm run e2e:provider   # does the configured key and model actually answer?
 npm run e2e:live       # real repair + real advisory on a live page (spends tokens)
 npm run e2e:dashboard  # the dashboard on both routes, offline, plus the external boundary
+
+# Bright Data (agent/) — these reach a real remote browser and cost real minutes
+npm run brightdata:check    # do the Scraping Browser credentials work?
+npm run brightdata -- AAPL  # one scrape at a terminal, repairing what is broken
+npm run brightdata -- --registry     # what has been healed so far
+npm run agent               # the loopback bridge the extension calls
+npm run e2e:brightdata      # the whole Bright Data path, against the real service
 ```
 
 ### Credentials for the e2e runs
@@ -474,6 +634,42 @@ The last sweep, 23 checks, all passing:
 | What a web page *can* read | No `apiKey`, no `sk-ant`, no `gsk_` anywhere in it |
 | A ticker added from the website | Actually lands in the extension's storage |
 
+`npm run e2e:brightdata` drives the Bright Data path against the real service,
+ending in a real Chrome running the real unpacked extension. The last sweep, 12
+checks, all passing:
+
+| Checked | Result |
+| --- | --- |
+| The endpoint and credentials | Accepted; the remote browser reported `Chrome/151.0.7922.34` |
+| `stockanalysis.com/stocks/aapl` through the Scraping Browser | `AAPL` at 309.35 USD, with volume and a headline, in ~22s |
+| `Captcha.waitForSolve` | Reachable; reported `not_detected` on a page that has none |
+| `google.com/finance/quote/AAPL:NASDAQ` | The shipped price selector is dead, so the model proposed `.N6SYTe > span > span`, it was validated **inside the remote page**, and it read 309.35 — matching the other site |
+| The repair afterwards | Written to `agent/state/registry.json` against `www.google.com` |
+| The same page again | Read with the healed selector and **0 further model calls** |
+| `GET /health` | Ready, and the payload contains no password anywhere in it |
+| `POST /scrape` | The snapshot shape the extension stores, `method: "brightdata"` |
+| The extension's service worker reaching the agent | `TEST_BRIDGE` answered with the zone and the exit country |
+| A scrape driven from the options page | `SCRAPE_VIA_BRIDGE` returned a usable snapshot via `brightdata` |
+| Where it landed | `snapshots.AAPL`, the price history, and `watchlist.AAPL.last_method = "brightdata"` — the same writes a tab scan makes |
+| The options page while all that ran | No uncaught exceptions and no console errors |
+
+Across three consecutive sweeps the model proposed a *different* valid selector
+each time — `.LhDNu .N6SYTe span span`, `.fpRuab > span > span`,
+`.N6SYTe > span > span` — and all three read the same price. It is deriving the
+selector from the page each run, not reciting a remembered one.
+
+That Google Finance row is the honest one. Nothing was sabotaged for the demo:
+`src/lib/selectors.js` has recorded for some time that Finance Beta rewrote the
+page and that the surviving hooks resolve to the market-summary rail rather than
+the instrument, so the price there is deliberately left to the repair loop. The
+e2e forgets any stored repair for that host before it starts, so the run has to
+earn it again each time rather than reporting an older success.
+
+The first attempt at that check failed for a reason worth keeping: the exit node
+landed in Bulgaria, Google served `consent.google.com`, and the scraper truthfully
+reported that the page it reached had no price. That is what
+`BRIGHTDATA_COUNTRY` and the cross-host redirect check now exist for.
+
 See [docs/DEMO.md](docs/DEMO.md) for the screenshots and the demo script.
 
 Note that `activeTab` is granted only when *you* invoke the extension from the
@@ -502,6 +698,14 @@ Worth knowing before relying on any of this:
 - **OS notifications can be suppressed** by Focus Assist or Do Not Disturb
   without telling anyone. The toolbar badge and the in-page feed are the
   channels that always work.
+- **The Bright Data route needs a second process running.** `npm run agent` has
+  to be up, or the extension reports the agent as unreachable and falls back to
+  the local routes (except in `only` mode, which refuses). That is a consequence
+  of the WebSocket credentials rule, not a choice.
+- **A Bright Data scrape is slow and it costs.** A session is a real remote
+  browser: connect, navigate, wait out the CAPTCHA check, settle, and possibly
+  two model round trips. 20–35 seconds per ticker is normal. The bridge runs one
+  at a time on purpose, and `fallback` is the default mode for the same reason.
 - **Everything is local and capped**: 200 decisions, 60 price points per ticker,
   100 repair events, 200 alerts. Nothing syncs between devices.
 - **`session_open` means "the oldest reading still held"**, not a real market
@@ -527,10 +731,14 @@ Worth knowing before relying on any of this:
   have needed the extension anyway; making the in-extension route the one that
   always works means the dashboard has no setup step and no way to be left
   half-connected.
-- The spec's "Agent Service" is still not a separate service. The worker calls
-  the provider APIs directly, and the dashboard talks to the worker. Adding a
-  backend would mean a deploy target, an auth story, and moving the user's API
-  key off their machine — for a dashboard whose data is already local.
+- The spec's "Agent Service" now exists, as `agent/`, but only for the part that
+  genuinely cannot run in a browser: the Bright Data Scraping Browser endpoint
+  carries credentials in its URL, and `new WebSocket()` is required by the HTML
+  standard to refuse those. Everything else stayed in the worker — it calls the
+  provider APIs directly and the dashboard talks to it — because a backend for
+  the rest would mean a deploy target, an auth story, and moving the user's API
+  key off their machine, for a dashboard whose data is already local. The agent
+  is loopback-only, optional, and off until configured.
 - `permissions` gained `alarms` and `notifications`, and
   `optional_host_permissions` was added. Background monitoring is not possible
   without the first two, and reading a page you are not looking at is not

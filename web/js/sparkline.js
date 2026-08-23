@@ -11,7 +11,7 @@
 
 const NS = 'http://www.w3.org/2000/svg';
 
-const svgEl = (name, attrs = {}) => {
+export const svgEl = (name, attrs = {}) => {
   const node = document.createElementNS(NS, name);
   for (const [key, value] of Object.entries(attrs)) node.setAttribute(key, String(value));
   return node;
@@ -23,6 +23,9 @@ const svgEl = (name, attrs = {}) => {
  * will anchor on scan history, and for the same reason.
  */
 export const MIN_CHART_POINTS = 4;
+
+/** Makes each chart's gradient id unique, since they share one document. */
+let gradientSeq = 0;
 
 /** The prices in a stored series, oldest first. */
 export function seriesOf(points) {
@@ -70,10 +73,29 @@ export function sparkline(points, { width = 220, height = 44, direction = 'flat'
   svg.dataset.direction = direction;
 
   const line = coords.map(([x, y]) => `${x},${y}`).join(' ');
+
+  // The area under the line fades out downward rather than sitting as one flat
+  // wash, so the chart has a horizon instead of a floor. The stops are
+  // `currentColor`, which is what lets the stylesheet decide the hue from the
+  // direction alone and keeps every colour decision in one file.
+  const gradientId = `spark-fade-${(gradientSeq += 1)}`;
+  const gradient = svgEl('linearGradient', { id: gradientId, x1: '0', y1: '0', x2: '0', y2: '1' });
+  gradient.append(
+    svgEl('stop', { offset: '0', 'stop-color': 'currentColor', 'stop-opacity': '0.3' }),
+    svgEl('stop', { offset: '1', 'stop-color': 'currentColor', 'stop-opacity': '0' })
+  );
+  const defs = svgEl('defs');
+  defs.append(gradient);
+
   // The fill is the same path closed along the floor, which keeps the two in
   // step without computing the geometry twice.
   svg.append(
-    svgEl('polygon', { class: 'spark-fill', points: `0,${height} ${line} ${width},${height}` }),
+    defs,
+    svgEl('polygon', {
+      class: 'spark-fill',
+      fill: `url(#${gradientId})`,
+      points: `0,${height} ${line} ${width},${height}`,
+    }),
     svgEl('polyline', { class: 'spark-line', points: line }),
     svgEl('circle', { class: 'spark-head', cx: coords[coords.length - 1][0], cy: coords[coords.length - 1][1], r: 2.5 })
   );

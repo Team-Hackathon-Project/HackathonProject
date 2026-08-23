@@ -149,6 +149,18 @@ test('a watched ticker that has never been scanned still renders', () => {
   assert.ok(card.textContent.includes('—')); // no price, said plainly
 });
 
+test('the card says how the reading was taken, when it was not a plain tab scan', () => {
+  const entryWith = (last_method) => ({ ticker: 'AAPL', source_url: SNAPSHOT.source_url, monitor: true, last_method });
+
+  // A headless fetch and a remote Bright Data session are very different things
+  // to have happened on someone's behalf, and the second one costs money.
+  assert.match(watchCard(row({ entry: entryWith('fetch') }), handlers).textContent, /headless/);
+  assert.match(watchCard(row({ entry: entryWith('brightdata') }), handlers).textContent, /Bright Data/);
+
+  const plain = watchCard(row({ entry: entryWith('tab') }), handlers).textContent;
+  assert.equal(/headless|Bright Data/.test(plain), false, 'a tab scan is the unremarkable case');
+});
+
 test('a page that reported no change says so instead of showing a fake zero', () => {
   const card = watchCard(row({ snapshot: { ...SNAPSHOT, change_value: null, change_percentage: null } }), handlers);
   assert.match(card.textContent, /no change data/);

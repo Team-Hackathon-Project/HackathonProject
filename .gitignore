@@ -10,3 +10,8 @@ e2e/shots-targets/
 e2e/shots-heal/
 e2e/shots-heal-*/
 e2e/shots-dashboard/
+
+# Agent state: healed selectors and snapshots the Bright Data agent recorded.
+agent/state/
+
+e2e/shots-brightdata/

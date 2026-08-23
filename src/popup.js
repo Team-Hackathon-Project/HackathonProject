@@ -25,6 +25,7 @@ const ui = {
   snapshotCard: el('snapshot-card'),
   ticker: el('snapshot-title'),
   price: el('snapshot-price'),
+  priceRow: el('snapshot-price').closest('.price'),
   currency: el('snapshot-currency'),
   change: el('snapshot-change'),
   volume: el('snapshot-volume'),
@@ -38,7 +39,6 @@ const ui = {
   noticeBanner: el('notice-banner'),
   adviceCard: el('advice-card'),
   action: el('advice-action'),
-  bar: el('advice-bar'),
   score: el('advice-score'),
   rationale: el('advice-rationale'),
   source: el('advice-source'),
@@ -121,6 +121,13 @@ function renderSnapshot(snapshot) {
     : '—';
   ui.currency.textContent = snapshot.currency || '';
 
+  // A freshly read price lands rather than appears. Removing the class,
+  // reading a layout property and adding it back is what replays a CSS
+  // animation on an element that never left the DOM.
+  ui.priceRow.classList.remove('is-fresh');
+  void ui.priceRow.offsetWidth;
+  ui.priceRow.classList.add('is-fresh');
+
   ui.change.textContent = snapshot.change_percentage || '—';
   ui.change.classList.remove('up', 'down');
   if (Number.isFinite(snapshot.change_value)) {
@@ -147,8 +154,11 @@ function renderSnapshot(snapshot) {
 function renderAdvice(advice) {
   ui.action.textContent = advice.action;
   ui.action.className = `badge ${advice.action}`;
+  // The gauge is the ring around the verdict word, and it is drawn from this
+  // one number: the arc sweeps `--confidence` percent of the circle. Set on the
+  // card rather than on the arc itself so the glow behind the lens reads it too.
   const percent = Math.round((advice.confidence_score || 0) * 100);
-  ui.bar.style.width = `${percent}%`;
+  ui.adviceCard.style.setProperty('--confidence', String(percent));
   ui.score.textContent = `${percent}% confidence`;
   ui.rationale.textContent = advice.rationale;
 
@@ -277,6 +287,9 @@ async function runScrape() {
     const result = await request(MSG.SCRAPE_ACTIVE_TAB);
     currentSnapshot = result.snapshot;
     ui.context.textContent = result.host || 'Self-healing scraper';
+    // A host is an identifier and is typeset as one; the fallback is a
+    // sentence, and setting prose in the monospace face reads as a bug.
+    ui.context.classList.toggle('is-host', Boolean(result.host));
     renderSnapshot(result.snapshot);
     renderTargets(result.targets);
     renderBanners(result.healed, result.warnings, result.notices);

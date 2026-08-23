@@ -23,8 +23,42 @@ globalThis.window = dom.window;
 globalThis.document = dom.window.document;
 
 const runtimeMessages = [];
+
+/** Origins the fake browser has granted, and what the next request will answer. */
+const granted = new Set();
+let grantOutcome = true;
+
+/** What the fake service worker should answer the next TEST_BRIDGE with. */
+let bridgeProbe = {
+  ok: true,
+  ms: 12,
+  health: {
+    ok: true,
+    protocol: 1,
+    tokenRequired: false,
+    brightdata: { configured: true, zone: 'scraping_browser1', description: 'zone scraping_browser1', redacted: 'wss://brd-customer-c-zone-scraping_browser1:b7••••@brd.superproxy.io:9222' },
+    llm: { provider: 'groq', model: 'openai/gpt-oss-120b' },
+    selfHealing: { available: true, reason: null },
+    heals: [],
+  },
+};
+
 globalThis.chrome = {
   storage,
+  permissions: {
+    async contains({ origins }) {
+      return origins.every((origin) => granted.has(origin));
+    },
+    async request({ origins }) {
+      if (!grantOutcome) return false;
+      for (const origin of origins) granted.add(origin);
+      return true;
+    },
+    async remove({ origins }) {
+      for (const origin of origins) granted.delete(origin);
+      return true;
+    },
+  },
   runtime: {
     lastError: null,
     // Stands in for the service worker: the options page only ever talks to it
@@ -36,6 +70,21 @@ globalThis.chrome = {
         const portfolio = (await storage.local.get(STORAGE_KEYS.PORTFOLIO))[STORAGE_KEYS.PORTFOLIO] || {};
         const suggestion = suggestTargets({ ticker, position: portfolio[ticker] || {} });
         return suggestion ? { ok: true, data: suggestion } : { ok: false, error: `Nothing to go on for ${ticker} yet.` };
+      }
+      if (message.type === 'TEST_BRIDGE') return { ok: true, data: bridgeProbe };
+      if (message.type === 'SCRAPE_VIA_BRIDGE') {
+        return {
+          ok: true,
+          data: {
+            snapshot: { ticker: message.payload.ticker, current_price: 309.35, currency: 'USD' },
+            usable: true,
+            method: 'brightdata',
+            healed: [{ field: 'price', selector: '.LhDNu span', strategy: 'css' }],
+            warnings: [],
+            notices: [],
+            duration_ms: 24000,
+          },
+        };
       }
       await storage.local.set({ [STORAGE_KEYS.SELECTORS]: {} });
       return { ok: true };
@@ -260,4 +309,150 @@ test('each provider links to the page its key comes from', async () => {
   select.dispatchEvent(new window.Event('change'));
   await settle();
   assert.equal(el('key-link').getAttribute('href'), 'https://console.groq.com/keys');
+});
+
+/* ------------------------------------------------------------------ *
+ * Bright Data
+ *
+ * The panel configures the local agent, never the Scraping Browser credentials
+ * themselves — those live in the agent's `.env` and must not be reachable from
+ * a page that the extension renders.
+ * ------------------------------------------------------------------ */
+
+test('the Bright Data panel defaults to off, on loopback, as a last resort', () => {
+  assert.equal(el('bd-enabled').checked, false, 'nothing reaches a third party until it is asked for');
+  assert.equal(el('bd-url').value, 'http://127.0.0.1:8791');
+  assert.equal(el('bd-mode').value, 'fallback');
+  assert.equal(el('bd-token').getAttribute('type'), 'password', 'the shared token is not shoulder-readable');
+});
+
+test('the panel offers no field for the Bright Data password', () => {
+  // The Scraping Browser credentials belong in the agent's .env, on the machine
+  // that dials the endpoint. Everything here configures the agent's *address*.
+  const ids = Array.from(dom.window.document.querySelectorAll('#brightdata input, #brightdata select')).map((node) => node.id);
+  assert.deepEqual(ids.sort(), ['bd-enabled', 'bd-mode', 'bd-ticker', 'bd-token', 'bd-url']);
+});
+
+test('an address that is not loopback is refused before it is saved', async () => {
+  el('bd-url').value = 'http://scraper.example.com:8791';
+  click('bd-save');
+  await settle();
+
+  assert.match(el('bd-status').textContent, /127\.0\.0\.1|localhost/);
+  const stored = (await storage.local.get(STORAGE_KEYS.SETTINGS))[STORAGE_KEYS.SETTINGS];
+  assert.notEqual(stored.brightdata && stored.brightdata.bridgeUrl, 'http://scraper.example.com:8791');
+});
+
+test('a valid configuration is saved, and the address is normalized to an origin', async () => {
+  el('bd-url').value = 'http://localhost:8791/ignored/path';
+  el('bd-enabled').checked = true;
+  el('bd-mode').value = 'first';
+  el('bd-token').value = 'hunter2';
+  click('bd-save');
+  await settle();
+
+  const stored = (await storage.local.get(STORAGE_KEYS.SETTINGS))[STORAGE_KEYS.SETTINGS];
+  assert.deepEqual(stored.brightdata, {
+    enabled: true, bridgeUrl: 'http://localhost:8791', token: 'hunter2', mode: 'first',
+  });
+  assert.match(el('bd-status').textContent, /Saved/);
+});
+
+test('granting access asks the browser for the agent origin, without the port', async () => {
+  click('bd-grant');
+  await settle();
+
+  assert.equal(granted.has('http://localhost/*'), true, 'Chrome match patterns carry no port');
+  assert.match(el('bd-grant').textContent, /Revoke/);
+});
+
+test('granting again revokes, and the button says so', async () => {
+  click('bd-grant');
+  await settle();
+
+  assert.equal(granted.has('http://localhost/*'), false);
+  assert.match(el('bd-grant').textContent, /Grant/);
+});
+
+test('testing the agent goes through the service worker and reports what it found', async () => {
+  runtimeMessages.length = 0;
+  click('bd-test');
+  await settle();
+
+  const sent = runtimeMessages.find((message) => message.type === 'TEST_BRIDGE');
+  assert.ok(sent, 'the probe must run where the real calls are made, not from this page');
+  assert.equal(sent.payload.bridgeUrl, 'http://localhost:8791');
+  assert.match(el('bd-status').textContent, /scraping_browser1/);
+  assert.match(el('bd-report').textContent, /Self-healing/);
+});
+
+test('the report shows the redacted endpoint and never a password', async () => {
+  click('bd-test');
+  await settle();
+  assert.match(el('bd-report').textContent, /brd-customer-c-zone-scraping_browser1/);
+  assert.match(el('bd-report').textContent, /•/);
+});
+
+test('an agent that answers but is not ready says why', async () => {
+  bridgeProbe = {
+    ok: false,
+    ms: 8,
+    error: 'The agent is running but Bright Data is not configured.',
+    health: {
+      ok: false,
+      protocol: 1,
+      tokenRequired: false,
+      brightdata: { configured: false, error: 'No Bright Data endpoint in the environment.' },
+      llm: { provider: 'groq', model: 'x' },
+      selfHealing: { available: false, reason: 'no model API key in .env' },
+      heals: [],
+    },
+  };
+  click('bd-test');
+  await settle();
+
+  assert.match(el('bd-status').textContent, /not configured/);
+  assert.match(el('bd-report').textContent, /No Bright Data endpoint/);
+  assert.match(el('bd-report').textContent, /no model API key/);
+});
+
+test('an on-demand scrape refuses a ticker that is not one', async () => {
+  runtimeMessages.length = 0;
+  el('bd-ticker').value = '!!';
+  click('bd-scrape');
+  await settle();
+
+  assert.match(el('bd-status').textContent, /Enter a ticker/);
+  assert.equal(runtimeMessages.some((message) => message.type === 'SCRAPE_VIA_BRIDGE'), false);
+});
+
+test('an on-demand scrape refuses to run against unsaved settings', async () => {
+  runtimeMessages.length = 0;
+  el('bd-mode').value = 'only';
+  el('bd-mode').dispatchEvent(new window.Event('change'));
+  el('bd-ticker').value = 'AAPL';
+  click('bd-scrape');
+  await settle();
+
+  // The worker reads the settings from storage, so scraping against a form that
+  // has not been saved would silently use the previous configuration.
+  assert.match(el('bd-status').textContent, /Save the settings first/);
+  assert.equal(runtimeMessages.some((message) => message.type === 'SCRAPE_VIA_BRIDGE'), false);
+});
+
+test('an on-demand scrape goes through the worker and reports what came back', async () => {
+  click('bd-save');
+  await settle();
+
+  runtimeMessages.length = 0;
+  el('bd-ticker').value = ' aapl ';
+  click('bd-scrape');
+  await settle();
+
+  const sent = runtimeMessages.find((message) => message.type === 'SCRAPE_VIA_BRIDGE');
+  assert.ok(sent, 'the scrape must run in the worker, which is where the bridge call is made');
+  assert.equal(sent.payload.ticker, 'AAPL');
+  assert.match(el('bd-status').textContent, /AAPL at 309\.35 USD/);
+  assert.match(el('bd-status').textContent, /Repaired price/);
+  assert.equal(el('bd-ticker').value, '', 'the field resets after a successful read');
 });

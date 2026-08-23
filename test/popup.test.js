@@ -93,7 +93,9 @@ test('scanning renders the snapshot and the advisory card', async () => {
 
   assert.equal(el('advice-action').textContent, 'SELL');
   assert.equal(el('advice-action').className, 'badge SELL');
-  assert.equal(el('advice-bar').style.width, '72%');
+  // The confidence gauge is the ring around the verdict word, swept from this
+  // one custom property.
+  assert.equal(el('advice-card').style.getPropertyValue('--confidence'), '72');
   assert.equal(el('advice-score').textContent, '72% confidence');
   assert.match(el('advice-rationale').textContent, /sell target/);
   assert.match(el('advice-source').textContent, /Anthropic \(Claude\)/);

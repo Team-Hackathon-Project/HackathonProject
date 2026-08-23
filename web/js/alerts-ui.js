@@ -209,7 +209,7 @@ export function toaster({ container, isExtensionPage }) {
       if (shown.has(alert.id)) continue;
       shown.add(alert.id);
 
-      const toast = el('div.toast', { dataset: { direction: alert.direction || 'flat' }, role: 'status' },
+      const toast = el('div.toast.pane', { dataset: { direction: alert.direction || 'flat' }, role: 'status' },
         el('strong', { text: alert.title }),
         el('span.small.muted', { text: alert.body }));
       container.append(toast);

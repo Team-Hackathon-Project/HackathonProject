@@ -12,11 +12,12 @@
 
     <div class="shell">
       <aside class="sidebar">
-        <div class="sidebar-inner">
+        <div class="sidebar-inner pane">
           <div class="brand">
             <span class="mark" aria-hidden="true">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M2 12h4l2.5-7 4 14 2.5-7h7" />
+                <path class="ring" d="M16.82 5.12A8.4 8.4 0 1 0 20.27 13.46" />
+                <path d="M7.2 14.4 10.3 11.3l2.9 2.1 3.4-4.3" />
               </svg>
             </span>
             <span class="brand-text">
@@ -25,13 +26,80 @@
             </span>
           </div>
 
+          <!--
+            The rail switches panels rather than scrolling to them, so each
+            entry carries an icon: at a glance the shape is what you aim at,
+            and the word is what confirms it.
+          -->
           <nav class="nav" aria-label="Settings sections">
-            <a href="#dashboard" class="nav-link is-active">Dashboard</a>
-            <a href="#agent" class="nav-link">Agent</a>
-            <a href="#targets" class="nav-link">Portfolio</a>
-            <a href="#access" class="nav-link">Site access</a>
-            <a href="#registry" class="nav-link">Selectors</a>
-            <a href="#repairs" class="nav-link">Repair log</a>
+            <a href="#dashboard" class="nav-link is-active">
+              <span class="nav-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="3" y="3" width="7.5" height="8.5" rx="1.8" />
+                  <rect x="13.5" y="3" width="7.5" height="5" rx="1.8" />
+                  <rect x="3" y="14.5" width="7.5" height="6.5" rx="1.8" />
+                  <rect x="13.5" y="11" width="7.5" height="10" rx="1.8" />
+                </svg>
+              </span>
+              <span>Dashboard</span>
+            </a>
+            <a href="#agent" class="nav-link">
+              <span class="nav-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="6.5" y="6.5" width="11" height="11" rx="2.6" />
+                  <path d="M10 3v3M14 3v3M10 18v3M14 18v3M3 10h3M3 14h3M18 10h3M18 14h3" />
+                </svg>
+              </span>
+              <span>Agent</span>
+            </a>
+            <a href="#targets" class="nav-link">
+              <span class="nav-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M3 17.5 9 11l4 3.5L21 6" />
+                  <path d="M15.5 6H21v5.5" />
+                  <path d="M3 21h18" />
+                </svg>
+              </span>
+              <span>Portfolio</span>
+            </a>
+            <a href="#access" class="nav-link">
+              <span class="nav-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M12 3 4.5 6v6c0 4.4 3.1 8.1 7.5 9 4.4-.9 7.5-4.6 7.5-9V6z" />
+                  <path d="m8.8 12 2.2 2.2 4.2-4.4" />
+                </svg>
+              </span>
+              <span>Site access</span>
+            </a>
+            <a href="#brightdata" class="nav-link">
+              <span class="nav-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="12" cy="12" r="8.5" />
+                  <path d="M3.5 12h17" />
+                  <path d="M12 3.5c2.2 2.4 3.4 5.4 3.4 8.5S14.2 18.1 12 20.5c-2.2-2.4-3.4-5.4-3.4-8.5S9.8 5.9 12 3.5Z" />
+                </svg>
+              </span>
+              <span>Bright Data</span>
+            </a>
+            <a href="#registry" class="nav-link">
+              <span class="nav-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="m8.5 8-4 4 4 4M15.5 8l4 4-4 4" />
+                  <path d="m13.5 5-3 14" />
+                </svg>
+              </span>
+              <span>Selectors</span>
+            </a>
+            <a href="#repairs" class="nav-link">
+              <span class="nav-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M3.5 12a8.5 8.5 0 1 0 2.6-6.1" />
+                  <path d="M3.5 4.5V10H9" />
+                  <path d="M12 8.5V12l2.5 1.8" />
+                </svg>
+              </span>
+              <span>Repair log</span>
+            </a>
           </nav>
 
           <p class="sidebar-foot">
@@ -42,19 +110,22 @@
       </aside>
 
       <main>
-        <header class="page-head">
-          <h1>Settings</h1>
+        <header class="page-head pane">
+          <div class="page-head-text">
+            <p class="eyebrow">Market Advisory Engine</p>
+            <h1>Settings</h1>
+          </div>
           <p id="agent-state" class="agent-chip">Loading…</p>
         </header>
 
         <!-- ---------------------------------------------------------- -->
-        <section id="dashboard" class="panel is-active" aria-labelledby="dashboard-title">
+        <section id="dashboard" class="panel stagger is-active" aria-labelledby="dashboard-title">
           <div class="panel-head">
             <h2 id="dashboard-title">Dashboard</h2>
             <p class="panel-sub">Every ticker you are watching, on one page.</p>
           </div>
 
-          <div class="settings">
+          <div class="settings pane">
             <div class="setting">
               <div class="setting-text">
                 <span class="setting-label">Open the dashboard</span>
@@ -76,7 +147,7 @@
             </div>
           </div>
 
-          <details class="note">
+          <details class="note pane">
             <summary>Why only localhost</summary>
             <p>
               Only <code>localhost</code> and <code>127.0.0.1</code> can reach the extension. That list lives in
@@ -89,13 +160,13 @@
         </section>
 
         <!-- ---------------------------------------------------------- -->
-        <section id="agent" class="panel" aria-labelledby="agent-title" hidden>
+        <section id="agent" class="panel stagger" aria-labelledby="agent-title" hidden>
           <div class="panel-head">
             <h2 id="agent-title">Agent</h2>
             <p class="panel-sub">Which model answers, and how much of the page it may see.</p>
           </div>
 
-          <div class="settings">
+          <div class="settings pane">
             <div class="setting">
               <div class="setting-text">
                 <label for="provider">Model provider</label>
@@ -177,7 +248,7 @@
 
           <p id="model-status" class="status" role="status" aria-live="polite"></p>
 
-          <details class="note">
+          <details class="note pane">
             <summary>Where the key is kept</summary>
             <p>
               Stored in <code>chrome.storage.local</code> on this machine and sent only to
@@ -186,7 +257,7 @@
             </p>
           </details>
 
-          <footer class="action-bar">
+          <footer class="action-bar pane">
             <span id="settings-dirty" class="dirty hidden">Unsaved changes</span>
             <p id="settings-status" class="status" role="status" aria-live="polite"></p>
             <button id="save-settings" class="btn primary small" type="button">Save settings</button>
@@ -194,28 +265,30 @@
         </section>
 
         <!-- ---------------------------------------------------------- -->
-        <section id="targets" class="panel" aria-labelledby="targets-title" hidden>
+        <section id="targets" class="panel stagger" aria-labelledby="targets-title" hidden>
           <div class="panel-head">
             <h2 id="targets-title">Portfolio</h2>
             <p class="panel-sub">Targets are what turn a quote into a signal. Only the ticker is required.</p>
           </div>
 
-          <div class="position-form">
-            <div class="field"><label for="pos-ticker">Ticker <span class="req">required</span></label><input id="pos-ticker" type="text" placeholder="AAPL" maxlength="10" autocomplete="off" /></div>
-            <div class="field"><label for="pos-shares">Shares</label><input id="pos-shares" type="number" placeholder="0" step="any" min="0" /></div>
-            <div class="field"><label for="pos-cost">Avg cost</label><input id="pos-cost" type="number" placeholder="0.00" step="any" min="0" /></div>
-            <div class="field"><label for="pos-buy">Buy below</label><input id="pos-buy" type="number" placeholder="0.00" step="any" min="0" /></div>
-            <div class="field"><label for="pos-sell">Sell above</label><input id="pos-sell" type="number" placeholder="0.00" step="any" min="0" /></div>
+          <div class="position-card pane">
+            <div class="position-form">
+              <div class="field"><label for="pos-ticker">Ticker <span class="req">required</span></label><input id="pos-ticker" type="text" placeholder="AAPL" maxlength="10" autocomplete="off" /></div>
+              <div class="field"><label for="pos-shares">Shares</label><input id="pos-shares" type="number" placeholder="0" step="any" min="0" /></div>
+              <div class="field"><label for="pos-cost">Avg cost</label><input id="pos-cost" type="number" placeholder="0.00" step="any" min="0" /></div>
+              <div class="field"><label for="pos-buy">Buy below</label><input id="pos-buy" type="number" placeholder="0.00" step="any" min="0" /></div>
+              <div class="field"><label for="pos-sell">Sell above</label><input id="pos-sell" type="number" placeholder="0.00" step="any" min="0" /></div>
+            </div>
+
+            <div class="button-row">
+              <button id="save-position" class="btn primary small" type="button">Save position</button>
+              <button id="suggest-targets" class="btn ghost small" type="button">Suggest targets</button>
+              <label class="checkbox inline"><input id="pos-auto" type="checkbox" /> Keep updated automatically</label>
+            </div>
+            <p id="position-status" class="status" role="status" aria-live="polite"></p>
           </div>
 
-          <div class="button-row">
-            <button id="save-position" class="btn primary small" type="button">Save position</button>
-            <button id="suggest-targets" class="btn ghost small" type="button">Suggest targets</button>
-            <label class="checkbox inline"><input id="pos-auto" type="checkbox" /> Keep updated automatically</label>
-          </div>
-          <p id="position-status" class="status" role="status" aria-live="polite"></p>
-
-          <details class="note">
+          <details class="note pane">
             <summary>What "Suggest targets" uses</summary>
             <p>
               Your own data: the average of the prices you have scanned for that ticker, or your approved BUY
@@ -235,16 +308,16 @@
         </section>
 
         <!-- ---------------------------------------------------------- -->
-        <section id="access" class="panel" aria-labelledby="access-title" hidden>
+        <section id="access" class="panel stagger" aria-labelledby="access-title" hidden>
           <div class="panel-head">
             <h2 id="access-title">Site access</h2>
             <p class="panel-sub">Which quote pages the extension may re-read on its own.</p>
           </div>
 
-          <div id="access-list" class="rows"></div>
+          <div id="access-list" class="rows pane"></div>
           <p id="access-status" class="status" role="status" aria-live="polite"></p>
 
-          <details class="note">
+          <details class="note pane">
             <summary>Why background refresh needs this</summary>
             <p>
               Scanning a tab you are looking at needs no permission at all — that is what clicking the toolbar icon
@@ -256,28 +329,145 @@
         </section>
 
         <!-- ---------------------------------------------------------- -->
-        <section id="registry" class="panel" aria-labelledby="registry-title" hidden>
+        <section id="brightdata" class="panel stagger" aria-labelledby="brightdata-title" hidden>
+          <div class="panel-head">
+            <h2 id="brightdata-title">Bright Data</h2>
+            <p class="panel-sub">Read quote pages through a remote browser, and repair the selectors there too.</p>
+          </div>
+
+          <div class="settings pane">
+            <div class="setting">
+              <div class="setting-text">
+                <label for="bd-enabled">Use the Scraping Browser</label>
+                <p class="hint">
+                  Off by default. Needs the local agent running: <code>npm run agent</code>.
+                </p>
+              </div>
+              <div class="setting-control">
+                <span class="toggle">
+                  <input id="bd-enabled" type="checkbox" />
+                  <span class="toggle-track" aria-hidden="true"></span>
+                </span>
+              </div>
+            </div>
+
+            <div class="setting">
+              <div class="setting-text">
+                <label for="bd-url">Agent address</label>
+                <p class="hint">Loopback only. The agent prints this line when it starts.</p>
+              </div>
+              <div class="setting-control">
+                <input id="bd-url" type="text" spellcheck="false" autocomplete="off" placeholder="http://127.0.0.1:8791" />
+              </div>
+            </div>
+
+            <div class="setting">
+              <div class="setting-text">
+                <label for="bd-token">Shared token</label>
+                <p class="hint">
+                  Optional, and worth setting. Must match <code>BRIGHTDATA_BRIDGE_TOKEN</code> in the agent's
+                  <code>.env</code>; without one, any page on this machine can spend your Bright Data hours.
+                </p>
+              </div>
+              <div class="setting-control">
+                <input id="bd-token" type="password" spellcheck="false" autocomplete="off" />
+              </div>
+            </div>
+
+            <div class="setting">
+              <div class="setting-text">
+                <label for="bd-mode">When to use it</label>
+                <p class="hint">Where the Scraping Browser sits in the background-refresh order.</p>
+              </div>
+              <div class="setting-control">
+                <select id="bd-mode">
+                  <option value="fallback">Last resort — try a plain fetch first</option>
+                  <option value="first">First — Bright Data, then fall back locally</option>
+                  <option value="only">Only — never open a local tab</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="setting">
+              <div class="setting-text">
+                <span class="setting-label">Access</span>
+                <p class="hint">The extension needs permission to talk to the agent's address.</p>
+              </div>
+              <div class="setting-control">
+                <div class="button-row">
+                  <button id="bd-grant" class="btn small" type="button">Grant access</button>
+                  <button id="bd-test" class="btn ghost small" type="button">Test agent</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="setting">
+              <div class="setting-text">
+                <label for="bd-ticker">Read one now</label>
+                <p class="hint">
+                  A real session through the Scraping Browser, repairs and all. Takes 20&ndash;35 seconds and
+                  spends Bright Data minutes. The result is stored exactly as a tab scan would be.
+                </p>
+              </div>
+              <div class="setting-control">
+                <input id="bd-ticker" type="text" placeholder="AAPL" maxlength="10" autocomplete="off" spellcheck="false" />
+                <div class="button-row">
+                  <button id="bd-scrape" class="btn ghost small" type="button">Scrape now</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <ul id="bd-report" class="entries pane"></ul>
+
+          <details class="note pane">
+            <summary>Why a separate agent, and not just the extension</summary>
+            <p>
+              The Scraping Browser is a remote Chrome addressed over the DevTools Protocol, and its endpoint carries
+              its credentials inside the URL —
+              <code>wss://brd-customer-…-zone-…:password@brd.superproxy.io:9222</code>. A browser refuses that: the
+              HTML standard requires <code>new WebSocket()</code> to throw when the URL includes credentials, and the
+              WebSocket API has no headers to carry the authentication instead. So the session runs in Node, in
+              <code>agent/</code>, and this page talks to it over loopback HTTP.
+            </p>
+            <p>
+              The agent runs the extension's own content script inside the remote page, so a repair made out there is
+              the same repair the popup would have made — and it is merged back into the healed-selector registry on
+              this machine, which is why the Selectors tab fills up whether the reading came from a tab or from
+              Bright Data.
+            </p>
+          </details>
+
+          <footer class="action-bar pane">
+            <span id="bd-dirty" class="dirty hidden">Unsaved changes</span>
+            <p id="bd-status" class="status" role="status" aria-live="polite"></p>
+            <button id="bd-save" class="btn primary small" type="button">Save Bright Data settings</button>
+          </footer>
+        </section>
+
+        <!-- ---------------------------------------------------------- -->
+        <section id="registry" class="panel stagger" aria-labelledby="registry-title" hidden>
           <div class="panel-head">
             <h2 id="registry-title">Healed selectors</h2>
             <p class="panel-sub">Selectors the agent rewrote after a page changed.</p>
           </div>
 
-          <ul id="registry-list" class="entries"></ul>
+          <ul id="registry-list" class="entries pane"></ul>
 
-          <footer class="action-bar">
+          <footer class="action-bar pane">
             <span class="hint">Safe to reset: anything still broken is repaired again on the next scan.</span>
             <button id="reset-registry" class="btn danger small" type="button">Reset healed selectors</button>
           </footer>
         </section>
 
         <!-- ---------------------------------------------------------- -->
-        <section id="repairs" class="panel" aria-labelledby="repairs-title" hidden>
+        <section id="repairs" class="panel stagger" aria-labelledby="repairs-title" hidden>
           <div class="panel-head">
             <h2 id="repairs-title">Repair log</h2>
             <p class="panel-sub">Every repair attempted, newest first — including the ones that failed.</p>
           </div>
 
-          <ul id="heal-log" class="entries"></ul>
+          <ul id="heal-log" class="entries pane"></ul>
         </section>
       </main>
     </div>

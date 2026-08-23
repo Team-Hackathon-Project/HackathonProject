@@ -2,15 +2,20 @@
  * Popup surface.
  *
  * The popup is 400x600 at most, so the layout is a single column with a fixed
- * header and one scrolling body. Three ideas carry the design:
+ * header and one scrolling body. Four ideas carry the design:
  *
- *  - The verdict is felt before it is read. When an advisory lands, a very
- *    faint wash (6% alpha) tints the top of the whole panel in the verdict's
- *    hue. You register "this is a sell" peripherally, then read the word.
- *  - The agent is visible while it works. A one-pixel rail under the header
- *    sweeps while a scan is in flight, so the popup never looks frozen.
- *  - Confidence is a measuring instrument, not a progress bar. The meter is
- *    masked into discrete ticks, which reads as a gauge rather than a download.
+ *  - The panel is glass over a lit field. The header, the cards and the modal
+ *    are translucent panes with a lit rim; the light behind them drifts, and
+ *    comes from `theme.css`. That is what gives a 400px column any depth.
+ *  - The verdict is felt before it is read. When an advisory lands, the light
+ *    behind the glass changes hue and every pane picks it up. You register
+ *    "this is a sell" peripherally, then read the word.
+ *  - The verdict is one object, not two. The call and the confidence in it are
+ *    drawn as a single lens: a ring gauge that sweeps to its reading with the
+ *    word inside it. A word and a separate progress bar are two things to
+ *    reconcile; this is one.
+ *  - The agent is visible while it works. The mark's ring turns and a hairline
+ *    rail sweeps under the header, so the popup never looks frozen.
  */
 
 body {
@@ -21,23 +26,29 @@ body {
   position: relative;
 }
 
-/* The verdict wash. Neutral until an advisory sets body[data-verdict]. */
+/*
+ * The verdict light.
+ *
+ * Sits above the ambient field and below the glass, so a call does not paint
+ * the cards - it changes what they are lit by. Neutral until an advisory sets
+ * body[data-verdict].
+ */
 .tone {
   position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 190px;
+  inset: 0;
   pointer-events: none;
   z-index: 0;
   opacity: 0;
   transition: opacity var(--slow) var(--ease), background var(--slow) var(--ease);
-  background: radial-gradient(120% 100% at 50% 0%, var(--tone-color, transparent) 0%, transparent 70%);
+  background:
+    radial-gradient(130% 70% at 50% -12%, var(--tone-color, transparent) 0%, transparent 68%),
+    radial-gradient(60% 40% at 84% 46%, var(--tone-color, transparent) 0%, transparent 70%);
 }
 body[data-verdict] .tone { opacity: 1; }
-body[data-verdict="BUY"] { --tone-color: color-mix(in srgb, var(--up) 14%, transparent); }
-body[data-verdict="SELL"] { --tone-color: color-mix(in srgb, var(--down) 14%, transparent); }
-body[data-verdict="HOLD"] { --tone-color: color-mix(in srgb, var(--hold) 12%, transparent); }
+
+body[data-verdict="BUY"] { --tone-color: color-mix(in srgb, var(--up) 22%, transparent); --tone-solid: var(--up); }
+body[data-verdict="SELL"] { --tone-color: color-mix(in srgb, var(--down) 22%, transparent); --tone-solid: var(--down); }
+body[data-verdict="HOLD"] { --tone-color: color-mix(in srgb, var(--hold) 16%, transparent); --tone-solid: var(--hold); }
 
 /* ---------------------------------------------------------------- *
  * Header
@@ -46,60 +57,54 @@ body[data-verdict="HOLD"] { --tone-color: color-mix(in srgb, var(--hold) 12%, tr
 .topbar {
   position: sticky;
   top: 0;
-  z-index: 4;
+  z-index: 6;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
   padding: 12px 16px;
-  background: color-mix(in srgb, var(--canvas) 82%, transparent);
-  backdrop-filter: saturate(140%) blur(14px);
-  -webkit-backdrop-filter: saturate(140%) blur(14px);
-  border-bottom: 1px solid var(--hair);
+  background: color-mix(in srgb, var(--canvas) 60%, transparent);
+  backdrop-filter: saturate(var(--sat)) blur(26px);
+  -webkit-backdrop-filter: saturate(var(--sat)) blur(26px);
+  box-shadow: inset 0 1px 0 var(--spec), 0 10px 30px -22px rgba(0, 0, 0, 0.9);
 }
 
-.brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
-
-/* The mark is a heartbeat trace: the scraper's pulse on a page. */
-.mark {
-  position: relative;
-  width: 28px;
-  height: 28px;
-  flex: none;
-  display: grid;
-  place-items: center;
-  border-radius: 9px;
-  border: 1px solid var(--hair-2);
-  background: var(--panel-2);
-  color: var(--ink);
+/* The header's bottom edge is the instrument's scale: a ruled hairline rather
+   than a plain border. It is one of exactly two places this motif appears. */
+.topbar::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 1px;
+  background-image: repeating-linear-gradient(90deg, var(--edge-2) 0 1px, transparent 1px 7px);
+  opacity: 0.5;
 }
-.mark svg { width: 16px; height: 16px; }
 
-/* A ring that breathes out of the mark while the agent is working. */
+.mark { width: 32px; height: 32px; border-radius: 10px; }
+.mark svg { width: 18px; height: 18px; }
+
+/* A ring of light that breathes out of the mark while the agent is working,
+   under the turning ring inside it. */
 .mark::after {
   content: "";
   position: absolute;
   inset: -1px;
-  border-radius: 10px;
-  border: 1px solid var(--agent);
+  border-radius: 11px;
+  border: 1px solid var(--accent);
   opacity: 0;
 }
 body[data-busy="1"] .mark::after { animation: pulse-ring 1.6s var(--ease) infinite; }
 
-.brand-text { display: flex; flex-direction: column; min-width: 0; }
+.brand-name { font-size: 13px; }
 
-.brand-name {
-  font-family: var(--font-display);
-  font-size: 13px;
-  font-weight: 600;
-  letter-spacing: -0.012em;
-  line-height: 1.25;
-}
-
+/* The host being read is an identifier, so it is set as one - but only once
+   there is a host. Until then this line is a sentence. */
 .sub {
   margin: 0;
   font-size: 10.5px;
-  line-height: 1.35;
+  line-height: 1.3;
   color: var(--ink-3);
   font-variant-numeric: normal;
   white-space: nowrap;
@@ -108,22 +113,29 @@ body[data-busy="1"] .mark::after { animation: pulse-ring 1.6s var(--ease) infini
   max-width: 220px;
 }
 
+.sub.is-host {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.01em;
+}
+
 /* Indeterminate activity rail: one hairline, no spinner, no layout shift. */
 .rail {
   position: absolute;
   left: 0;
   right: 0;
-  bottom: -1px;
+  bottom: 0;
   height: 1px;
   overflow: hidden;
   opacity: 0;
+  z-index: 1;
   transition: opacity var(--base) var(--ease);
 }
 .rail span {
   display: block;
   width: 40%;
   height: 100%;
-  background: linear-gradient(90deg, transparent, var(--agent), transparent);
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
 }
 body[data-busy="1"] .rail { opacity: 1; }
 body[data-busy="1"] .rail span { animation: sweep 1.25s var(--ease) infinite; }
@@ -141,14 +153,12 @@ main {
   gap: 12px;
 }
 
-main > * { animation: rise var(--base) var(--ease) both; }
+.scan { display: flex; flex-direction: column; gap: 9px; }
 
-.scan { display: flex; flex-direction: column; gap: 8px; }
-
-#scrape-btn { padding: 11px 14px; font-size: 13.5px; }
+#scrape-btn { padding: 12px 14px; font-size: 13.5px; border-radius: var(--r-2); }
 
 /* The status line reads as an instrument readout: a state dot, then the text. */
-.statusline { display: flex; align-items: flex-start; gap: 7px; min-height: 17px; }
+.statusline { display: flex; align-items: flex-start; gap: 8px; min-height: 17px; }
 
 .dot {
   width: 6px;
@@ -159,7 +169,7 @@ main > * { animation: rise var(--base) var(--ease) both; }
   background: var(--ink-3);
   transition: background var(--base) var(--ease);
 }
-body[data-busy="1"] .dot { background: var(--agent); animation: pulse-ring 1.4s var(--ease) infinite; }
+body[data-busy="1"] .dot { background: var(--accent); animation: pulse-ring 1.4s var(--ease) infinite; }
 .statusline:has(.status.error) .dot { background: var(--down); animation: none; }
 /* No message, no indicator - but keep the space so nothing jumps. */
 .statusline:has(.status:empty) .dot { visibility: hidden; }
@@ -168,14 +178,14 @@ body[data-busy="1"] .dot { background: var(--agent); animation: pulse-ring 1.4s 
  * Empty state - the popup teaches the loop in one glance.
  * ---------------------------------------------------------------- */
 
-.empty { gap: 12px; }
+.empty { gap: 13px; }
 
-.steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 11px; }
 
 .steps li {
   display: grid;
-  grid-template-columns: 20px 1fr;
-  gap: 10px;
+  grid-template-columns: 22px 1fr;
+  gap: 11px;
   align-items: start;
   font-size: 12px;
   color: var(--ink-2);
@@ -184,49 +194,82 @@ body[data-busy="1"] .dot { background: var(--agent); animation: pulse-ring 1.4s 
 .steps b {
   display: block;
   color: var(--ink);
-  font-weight: 550;
+  font-weight: 600;
   font-size: 12.5px;
   letter-spacing: -0.008em;
 }
 
+/* The step numbers are a real sequence - you scan, then read, then decide -
+   so they are numbered rather than bulleted. */
 .steps .n {
   display: grid;
   place-items: center;
-  width: 20px;
-  height: 20px;
-  border-radius: 7px;
-  border: 1px solid var(--hair);
-  background: var(--inset);
+  width: 22px;
+  height: 22px;
+  border-radius: 8px;
+  border: 1px solid var(--edge);
+  background: var(--well);
+  box-shadow: inset 0 1px 0 var(--spec);
+  font-family: var(--font-mono);
   font-size: 10px;
   font-weight: 600;
-  color: var(--ink-3);
+  color: var(--accent);
 }
 
 /* ---------------------------------------------------------------- *
  * Snapshot
  * ---------------------------------------------------------------- */
 
-.card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.card-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 
 .ticker {
-  font-size: 15px;
-  font-weight: 620;
-  letter-spacing: -0.015em;
+  font-size: 13px;
+  font-weight: 640;
   line-height: 1.2;
+  color: var(--ink-2);
 }
 
 .price {
-  margin: 0;
+  position: relative;
+  margin: -2px 0 0;
   display: flex;
   align-items: baseline;
-  gap: 7px;
+  gap: 8px;
   font-family: var(--font-display);
-  font-size: 34px;
-  font-weight: 620;
-  letter-spacing: -0.035em;
-  line-height: 1.05;
+  font-size: 38px;
+  font-weight: 640;
+  letter-spacing: -0.04em;
+  line-height: 1.02;
 }
-.price .cur { font-size: 12px; font-weight: 550; letter-spacing: 0.02em; color: var(--ink-3); }
+.price .cur {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: var(--ink-3);
+}
+
+/* A price that has just been read lands rather than appears: the figure comes
+   up from a whisker below with its own light behind it, once, for half a
+   second. It is the only thing on the surface that moves on new data, which is
+   what makes it legible as "this number is new". */
+.price.is-fresh { animation: price-land 620ms var(--spring) both; }
+.price.is-fresh::before {
+  content: "";
+  position: absolute;
+  inset: -12px -16px;
+  border-radius: var(--r-2);
+  background: radial-gradient(60% 100% at 20% 50%, rgba(var(--accent-rgb), 0.22), transparent 70%);
+  animation: fade-out 900ms var(--ease) both;
+  pointer-events: none;
+}
+
+@keyframes price-land {
+  from { opacity: 0; transform: translateY(7px); letter-spacing: -0.055em; }
+  to { opacity: 1; transform: none; letter-spacing: -0.04em; }
+}
+
+@keyframes fade-out { from { opacity: 1; } to { opacity: 0; } }
 
 /* The change reads as a signed quantity, with the direction carried by a
    caret so it survives being printed in greyscale or read colour-blind. */
@@ -235,7 +278,7 @@ body[data-busy="1"] .dot { background: var(--agent); animation: pulse-ring 1.4s 
   align-items: center;
   gap: 5px;
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 620;
   letter-spacing: -0.005em;
   color: var(--ink-3);
   white-space: nowrap;
@@ -245,15 +288,24 @@ body[data-busy="1"] .dot { background: var(--agent); animation: pulse-ring 1.4s 
    change figure gets a bare dash, not an empty badge. */
 .change.up,
 .change.down {
-  padding: 3px 8px;
+  padding: 4px 10px;
   border-radius: 99px;
-  border: 1px solid var(--hair);
-  background: var(--inset);
+  border: 1px solid var(--edge);
+  background: var(--glass-2);
+  box-shadow: var(--lift-1);
 }
 .change.up::before,
 .change.down::before { content: ""; width: 0; height: 0; flex: none; }
-.change.up { color: var(--up); border-color: color-mix(in srgb, var(--up) 32%, transparent); }
-.change.down { color: var(--down); border-color: color-mix(in srgb, var(--down) 32%, transparent); }
+.change.up {
+  color: var(--up);
+  border-color: color-mix(in srgb, var(--up) 34%, transparent);
+  background: color-mix(in srgb, var(--up) 12%, transparent);
+}
+.change.down {
+  color: var(--down);
+  border-color: color-mix(in srgb, var(--down) 34%, transparent);
+  background: color-mix(in srgb, var(--down) 12%, transparent);
+}
 .change.up::before {
   border-left: 3.5px solid transparent;
   border-right: 3.5px solid transparent;
@@ -265,25 +317,33 @@ body[data-busy="1"] .dot { background: var(--agent); animation: pulse-ring 1.4s 
   border-top: 5px solid currentColor;
 }
 
+/* Two wells cut into the card, divided by a hairline of light. */
 .metrics {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 1px;
-  margin: 2px 0 0;
-  background: var(--hair);
-  border: 1px solid var(--hair);
+  margin: 3px 0 0;
+  border: 1px solid var(--edge);
   border-radius: var(--r-2);
+  background: var(--well);
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.22);
   overflow: hidden;
 }
-.metrics > div { background: var(--panel); padding: 8px 10px; }
+.metrics > div { padding: 9px 12px; }
+.metrics > div + div { border-left: 1px solid var(--edge); }
 .metrics dt {
   font-size: 9.5px;
-  font-weight: 600;
+  font-weight: 650;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.09em;
   color: var(--ink-3);
 }
-.metrics dd { margin: 3px 0 0; font-size: 13px; font-weight: 600; letter-spacing: -0.01em; }
+.metrics dd {
+  margin: 3px 0 0;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
 
 /* An automatic target change is the user's own numbers moving. It gets a
    marked-up note, never a silent write. */
@@ -292,13 +352,19 @@ body[data-busy="1"] .dot { background: var(--agent); animation: pulse-ring 1.4s 
   font-size: 11px;
   line-height: 1.45;
   color: var(--ink-2);
-  padding: 8px 10px;
+  padding: 9px 11px;
   border-radius: var(--r-1);
-  background: var(--inset);
-  border-left: 2px solid var(--hair-2);
+  background: var(--well);
+  border-left: 2px solid var(--accent);
 }
 
-.disclosures { display: flex; flex-direction: column; gap: 2px; border-top: 1px solid var(--hair); padding-top: 8px; }
+.disclosures {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border-top: 1px solid var(--edge);
+  padding-top: 8px;
+}
 .disclosures ul { margin: 6px 0 4px; padding-left: 16px; color: var(--ink-2); font-size: 11px; }
 .disclosures li { margin-bottom: 4px; word-break: break-word; }
 .disclosures .mono li { word-break: break-all; }
@@ -309,14 +375,11 @@ body[data-busy="1"] .dot { background: var(--agent); animation: pulse-ring 1.4s 
 
 .banner {
   border-radius: var(--r-2);
-  padding: 9px 11px 9px 12px;
+  padding: 10px 12px 10px 13px;
   font-size: 11.5px;
   line-height: 1.45;
-  border: 1px solid var(--hair);
-  background: var(--panel);
-  position: relative;
   overflow: hidden;
-  animation: rise var(--base) var(--ease) both;
+  animation: rise var(--base) var(--spring) both;
 }
 .banner::before {
   content: "";
@@ -325,8 +388,9 @@ body[data-busy="1"] .dot { background: var(--agent); animation: pulse-ring 1.4s 
   top: 0;
   bottom: 0;
   width: 2px;
+  z-index: 2;
 }
-.banner ul { margin: 5px 0 0; padding-left: 15px; }
+.banner ul { margin: 6px 0 0; padding-left: 15px; }
 .banner li { margin-bottom: 3px; overflow-wrap: anywhere; line-height: 1.5; }
 /* Healed entries are selectors; warnings are sentences. */
 .banner.heal li { font-family: var(--font-mono); font-size: 10.5px; }
@@ -335,44 +399,47 @@ body[data-busy="1"] .dot { background: var(--agent); animation: pulse-ring 1.4s 
   font-size: 10px;
   font-weight: 650;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.09em;
   color: var(--ink-3);
 }
 
-.banner.heal { color: var(--ink); background: color-mix(in srgb, var(--agent) 7%, var(--panel)); }
-.banner.heal::before { background: var(--agent); }
-.banner.warn { color: var(--ink); background: color-mix(in srgb, var(--warn) 7%, var(--panel)); }
+.banner.heal { color: var(--ink); background: color-mix(in srgb, var(--accent) 10%, var(--glass)); }
+.banner.heal::before { background: var(--accent); }
+.banner.heal .banner-title { color: var(--accent); }
+.banner.warn { color: var(--ink); background: color-mix(in srgb, var(--warn) 10%, var(--glass)); }
 .banner.warn::before { background: var(--warn); }
+.banner.warn .banner-title { color: var(--warn); }
 
 /* A field this page does not carry is information, not a fault. It gets the
    same shape as a warning and none of the alarm. */
-.banner.note { color: var(--ink-2); background: var(--panel); }
-.banner.note::before { background: var(--hair-2); }
+.banner.note { color: var(--ink-2); }
+.banner.note::before { background: var(--edge-2); }
 .banner.note .banner-title { color: var(--ink-3); }
 
 /* ---------------------------------------------------------------- *
  * Setup prompt
  * ---------------------------------------------------------------- */
 
-.setup { gap: 12px; }
-.setup-head { display: grid; grid-template-columns: 28px 1fr; gap: 11px; align-items: start; }
+.setup { gap: 13px; }
+.setup-head { display: grid; grid-template-columns: 30px 1fr; gap: 12px; align-items: start; }
 
 .setup-icon {
   display: grid;
   place-items: center;
-  width: 28px;
-  height: 28px;
-  border-radius: 9px;
-  border: 1px solid var(--hair);
-  background: var(--inset);
-  color: var(--ink-2);
+  width: 30px;
+  height: 30px;
+  border-radius: 10px;
+  border: 1px solid var(--edge);
+  background: var(--well);
+  box-shadow: inset 0 1px 0 var(--spec);
+  color: var(--accent);
 }
 .setup-icon svg { width: 15px; height: 15px; }
 
 .setup-text b {
   display: block;
   font-size: 12.5px;
-  font-weight: 600;
+  font-weight: 620;
   letter-spacing: -0.008em;
   margin-bottom: 3px;
 }
@@ -381,109 +448,144 @@ body[data-busy="1"] .dot { background: var(--agent); animation: pulse-ring 1.4s 
 
 /* ---------------------------------------------------------------- *
  * Advisory
+ *
+ * The signature of the whole product: the call, the confidence in it and the
+ * hue it is lit by, drawn as one instrument.
  * ---------------------------------------------------------------- */
 
-.advice { gap: 12px; }
+.advice { gap: 13px; }
 
-.advice .verdict { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+/* `--confidence` is a registered property, so this one line is what makes the
+   gauge sweep to its reading instead of snapping to it. */
+#advice-card { transition: --confidence 900ms var(--spring); }
 
-/* The verdict word itself. Class name is load-bearing: popup.js writes
+.verdict { display: flex; align-items: center; gap: 16px; }
+
+.lens {
+  position: relative;
+  width: 94px;
+  height: 94px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  animation: lens-in 620ms var(--spring) both;
+}
+
+@keyframes lens-in {
+  from { opacity: 0; transform: scale(0.82); }
+  to { opacity: 1; transform: none; }
+}
+
+/* The verdict's own light, sitting behind the glass of the ring. */
+.lens::before {
+  content: "";
+  position: absolute;
+  inset: 8px;
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--tone-solid, transparent) 0%, transparent 72%);
+  opacity: 0.24;
+  filter: blur(6px);
+}
+
+/* The groove the arc runs in. Masked to a ring so the centre stays clear for
+   the word. */
+.confidence-track {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: var(--groove);
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 8px), #000 calc(100% - 7px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 8px), #000 calc(100% - 7px));
+}
+
+/* The arc itself: `--confidence` percent of a turn, starting at twelve
+   o'clock. popup.js writes that number and nothing else. */
+.confidence-fill {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: conic-gradient(var(--tone-solid, var(--ink-3)) calc(var(--confidence, 0) * 1%), transparent 0);
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 8px), #000 calc(100% - 7px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 8px), #000 calc(100% - 7px));
+}
+
+/* The verdict word. The class name is load-bearing: popup.js writes
    `badge <ACTION>` so the action doubles as the style hook. */
 .badge {
+  position: relative;
   font-family: var(--font-display);
-  font-size: 26px;
+  font-size: 22px;
   font-weight: 680;
   letter-spacing: -0.02em;
   line-height: 1;
   color: var(--ink-2);
-  display: inline-flex;
-  align-items: center;
-  gap: 9px;
-}
-.badge::before {
-  content: "";
-  width: 7px;
-  height: 7px;
-  border-radius: 99px;
-  background: currentColor;
-  box-shadow: 0 0 0 4px color-mix(in srgb, currentColor 16%, transparent);
 }
 .badge.BUY { color: var(--up); }
 .badge.SELL { color: var(--down); }
 .badge.HOLD { color: var(--hold); }
 
-.score { font-size: 11px; font-weight: 550; color: var(--ink-3); white-space: nowrap; }
+.verdict-read { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
 
-/* Ticked gauge: the fill is a plain width, the ticks are a mask over it. */
-.confidence-track {
-  height: 12px;
-  background: var(--inset);
-  -webkit-mask-image: repeating-linear-gradient(90deg, #000 0 2px, transparent 2px 5px);
-  mask-image: repeating-linear-gradient(90deg, #000 0 2px, transparent 2px 5px);
-}
-.confidence-fill {
-  height: 100%;
-  width: 0;
-  background: var(--ink-3);
-  transition: width var(--slow) var(--ease), background var(--base) var(--ease);
-}
-body[data-verdict="BUY"] .confidence-fill { background: var(--up); }
-body[data-verdict="SELL"] .confidence-fill { background: var(--down); }
-body[data-verdict="HOLD"] .confidence-fill { background: var(--hold); }
-
-.rationale {
+.score {
   margin: 0;
-  font-size: 12.5px;
-  line-height: 1.55;
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.015em;
   color: var(--ink);
-  letter-spacing: -0.004em;
 }
 
 .source {
   margin: 0;
   font-size: 10.5px;
+  line-height: 1.45;
   color: var(--ink-3);
-  display: flex;
-  align-items: center;
-  gap: 6px;
+  overflow-wrap: anywhere;
 }
-.source::before {
-  content: "";
-  width: 12px;
-  height: 1px;
-  flex: none;
-  background: var(--hair-2);
+
+.rationale {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.58;
+  color: var(--ink);
+  letter-spacing: -0.004em;
+  padding: 11px 12px;
+  border-radius: var(--r-2);
+  background: var(--well);
+  border: 1px solid var(--edge);
+  box-shadow: inset 0 1px 0 var(--spec);
 }
 
 .advice .disclaimer {
-  border-top: 1px solid var(--hair);
+  border-top: 1px solid var(--edge);
   padding-top: 10px;
 }
 
-.actions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
-.actions .btn { padding: 9px 8px; font-size: 12px; }
+.actions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; }
+.actions .btn { padding: 10px 8px; font-size: 12px; }
 
 /* The three decisions are equally weighted: the extension must not nudge. */
-.approve:hover { border-color: color-mix(in srgb, var(--up) 45%, transparent); color: var(--up); }
-.reject:hover { border-color: color-mix(in srgb, var(--down) 45%, transparent); color: var(--down); }
-.override:hover { border-color: color-mix(in srgb, var(--hold) 45%, transparent); color: var(--hold); }
+.approve:hover { border-color: color-mix(in srgb, var(--up) 50%, transparent); color: var(--up); background: color-mix(in srgb, var(--up) 13%, transparent); }
+.reject:hover { border-color: color-mix(in srgb, var(--down) 50%, transparent); color: var(--down); background: color-mix(in srgb, var(--down) 13%, transparent); }
+.override:hover { border-color: color-mix(in srgb, var(--hold) 50%, transparent); color: var(--hold); background: color-mix(in srgb, var(--hold) 13%, transparent); }
 
 .override-panel {
   display: grid;
   grid-template-columns: auto 1fr;
-  gap: 7px;
+  gap: 8px;
   align-items: center;
-  padding: 11px;
+  padding: 12px;
   border-radius: var(--r-2);
-  background: var(--inset);
-  border: 1px solid var(--hair);
-  animation: rise var(--fast) var(--ease) both;
+  background: var(--well);
+  border: 1px solid var(--edge);
+  box-shadow: inset 0 1px 0 var(--spec);
+  animation: rise var(--fast) var(--spring) both;
 }
 .override-panel label {
   font-size: 10px;
-  font-weight: 600;
+  font-weight: 650;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.09em;
   color: var(--ink-3);
 }
 .override-panel #override-note { grid-column: 1 / -1; }
@@ -499,17 +601,20 @@ body[data-verdict="HOLD"] .confidence-fill { background: var(--hold); }
   justify-content: space-between;
   align-items: center;
   gap: 10px;
-  font-size: 11.5px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.01em;
   color: var(--ink-2);
-  padding: 7px 0;
-  border-bottom: 1px solid var(--hair);
+  padding: 8px 0;
+  border-bottom: 1px solid var(--edge);
 }
 .log li:last-child { border-bottom: 0; padding-bottom: 0; }
 .log li:first-child { padding-top: 0; }
 
 .log .verdict {
+  display: inline;
   font-size: 9.5px;
-  font-weight: 650;
+  font-weight: 700;
   letter-spacing: 0.08em;
   color: var(--ink-3);
   white-space: nowrap;
@@ -530,33 +635,34 @@ body[data-verdict="HOLD"] .confidence-fill { background: var(--hold); }
   align-items: center;
   justify-content: center;
   padding: 20px;
-  background: color-mix(in srgb, var(--canvas) 72%, transparent);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
+  background: color-mix(in srgb, var(--canvas) 55%, transparent);
+  backdrop-filter: blur(10px) saturate(120%);
+  -webkit-backdrop-filter: blur(10px) saturate(120%);
   animation: fade var(--fast) var(--ease) both;
 }
 
-@keyframes fade { from { opacity: 0; } to { opacity: 1; } }
 @keyframes pop {
-  from { opacity: 0; transform: translateY(8px) scale(0.97); }
+  from { opacity: 0; transform: translateY(12px) scale(0.95); }
   to { opacity: 1; transform: none; }
 }
 
 .modal-box {
-  background: var(--panel);
-  border: 1px solid var(--hair-2);
+  background: var(--glass-2);
+  border-color: var(--edge-2);
   border-radius: var(--r-3);
-  padding: 16px;
+  padding: 18px;
   width: 100%;
   max-width: 336px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  box-shadow: var(--shadow-2);
-  animation: pop var(--base) var(--ease) both;
+  gap: 11px;
+  box-shadow: var(--lift-3);
+  backdrop-filter: blur(30px) saturate(var(--sat));
+  -webkit-backdrop-filter: blur(30px) saturate(var(--sat));
+  animation: pop var(--base) var(--spring) both;
 }
 
-.modal-box h3 { font-size: 14px; font-weight: 620; letter-spacing: -0.012em; }
+.modal-box h3 { font-size: 14.5px; font-weight: 640; letter-spacing: -0.012em; }
 #modal-body { margin: 0; font-size: 12.5px; line-height: 1.5; color: var(--ink); }
 
 .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 2px; }

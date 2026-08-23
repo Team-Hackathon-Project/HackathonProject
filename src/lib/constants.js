@@ -7,6 +7,8 @@
  * `test/protocol.test.js` asserts the two copies stay in sync.
  */
 
+import { DEFAULT_BRIDGE_URL } from './brightdata.js';
+
 export const MSG = {
   // popup -> background
   SCRAPE_ACTIVE_TAB: 'SCRAPE_ACTIVE_TAB',
@@ -16,6 +18,10 @@ export const MSG = {
   RESET_SELECTORS: 'RESET_SELECTORS',
   TEST_PROVIDER: 'TEST_PROVIDER',
   SUGGEST_TARGETS: 'SUGGEST_TARGETS',
+  // options page -> background: is the Bright Data agent bridge answering?
+  TEST_BRIDGE: 'TEST_BRIDGE',
+  // popup/dashboard -> background: read this ticker through Bright Data
+  SCRAPE_VIA_BRIDGE: 'SCRAPE_VIA_BRIDGE',
   // dashboard -> background
   GET_DASHBOARD_STATE: 'GET_DASHBOARD_STATE',
   GET_PRICE_HISTORY: 'GET_PRICE_HISTORY',
@@ -67,6 +73,8 @@ export const WORKER_MESSAGES = [
   MSG.RESET_SELECTORS,
   MSG.TEST_PROVIDER,
   MSG.SUGGEST_TARGETS,
+  MSG.TEST_BRIDGE,
+  MSG.SCRAPE_VIA_BRIDGE,
   MSG.GET_DASHBOARD_STATE,
   MSG.GET_PRICE_HISTORY,
   MSG.ADD_WATCH,
@@ -96,6 +104,11 @@ export const WORKER_MESSAGES = [
  *   SCRAPE_ACTIVE_TAB    activeTab means nothing when the caller is a web page
  *   RESET_SELECTORS      destructive, and belongs with the other options-page controls
  *   GET_STATE            superseded by GET_DASHBOARD_STATE, which is shaped for this
+ *   TEST_BRIDGE          accepts the bridge token as a payload
+ *   SCRAPE_VIA_BRIDGE    spends the user's Bright Data plan, one session per call,
+ *                        and nothing on the dashboard asks for it — the control
+ *                        that does live on the options page. An allowlist entry
+ *                        with no caller is surface for free.
  */
 export const EXTERNAL_ALLOWED = [
   MSG.GET_DASHBOARD_STATE,
@@ -207,7 +220,31 @@ export const DEFAULT_SETTINGS = {
    * question that mostly answers "HOLD, same as last time".
    */
   alertsUseLlm: false,
+  /**
+   * The Bright Data Scraping Browser, reached through the local agent bridge.
+   *
+   * Off until configured, and configured means two things are running: the
+   * agent (`npm run agent`) and a Bright Data zone behind it. The extension
+   * cannot dial the Scraping Browser itself — the endpoint carries credentials
+   * in the URL, and `new WebSocket()` is required by the HTML standard to throw
+   * on those — so the bridge is not a convenience, it is the whole mechanism.
+   * `src/lib/brightdata.js` documents it at length.
+   *
+   * `mode` places it in the background-refresh order:
+   *   fallback  plain fetch, then Bright Data, then a local background tab
+   *   first     Bright Data, then fetch, then a local tab
+   *   only      Bright Data, and report a failure rather than opening a tab
+   */
+  brightdata: {
+    enabled: false,
+    bridgeUrl: DEFAULT_BRIDGE_URL,
+    token: '',
+    mode: 'fallback',
+  },
 };
+
+/** The refresh-order settings `brightdata.mode` may take. */
+export const BRIGHTDATA_MODES = ['fallback', 'first', 'only'];
 
 /** Max characters of raw container HTML the content script hands to the healer. */
 export const SNIPPET_LIMIT = 20000;
@@ -220,6 +257,20 @@ export const SNIPPET_LIMIT = 20000;
  */
 export const REFRESH_FETCH_TIMEOUT_MS = 12000;
 export const REFRESH_TAB_TIMEOUT_MS = 15000;
+
+/**
+ * How long the worker waits on the Bright Data bridge.
+ *
+ * Far longer than the other two, and deliberately: the request behind it is a
+ * remote browser session — connect, navigate, wait out a CAPTCHA, and possibly
+ * two model round trips to repair a selector. The agent's own navigation
+ * timeout is 120s, so this has to sit above it or the worker gives up on a
+ * scrape that is about to succeed.
+ */
+export const REFRESH_BRIDGE_TIMEOUT_MS = 180000;
+
+/** The options page's connectivity probe, which only reads /health. */
+export const BRIDGE_PROBE_TIMEOUT_MS = 8000;
 
 /** Pause between tickers in one refresh pass, so a pass is not a burst. */
 export const REFRESH_GAP_MS = 700;

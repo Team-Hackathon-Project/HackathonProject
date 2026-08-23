@@ -42,7 +42,11 @@ export async function getSettings() {
     providers.anthropic.model = stored.model;
   }
   const { apiKey, model, ...rest } = stored;
-  return { ...DEFAULT_SETTINGS, ...rest, providers };
+  // `brightdata` gets the same one-level merge as `providers`: settings written
+  // before it existed carry no such key, and a later release adding a field to
+  // it must not be blanked out by an older stored object.
+  const brightdata = { ...DEFAULT_SETTINGS.brightdata, ...(stored.brightdata || {}) };
+  return { ...DEFAULT_SETTINGS, ...rest, providers, brightdata };
 }
 
 export async function saveSettings(patch) {
@@ -51,7 +55,8 @@ export async function saveSettings(patch) {
   for (const [id, values] of Object.entries(patch.providers || {})) {
     providers[id] = { ...(providers[id] || {}), ...values };
   }
-  const next = { ...current, ...patch, providers };
+  const brightdata = { ...current.brightdata, ...(patch.brightdata || {}) };
+  const next = { ...current, ...patch, providers, brightdata };
   await setRaw({ [STORAGE_KEYS.SETTINGS]: next });
   return next;
 }
@@ -297,6 +302,44 @@ export async function forgetHealedSelector(host, field) {
   if (!Object.keys(registry[host]).length) delete registry[host];
   await saveRegistry(registry);
   return true;
+}
+
+/**
+ * Folds a registry received from the Bright Data agent into this one.
+ *
+ * The agent keeps its own copy of the healed selectors — it is a separate
+ * process with separate storage, and it has to work with no browser running at
+ * all. This is the reconciliation: whichever side repaired a field more
+ * recently wins, so a repair made against a page opened through the Scraping
+ * Browser is available to the popup on the very next scan.
+ *
+ * Entries are re-validated rather than trusted. The bridge is loopback and
+ * token-guarded, but a selector is a string that gets run against pages, and
+ * "it arrived over the local socket" is not a reason to skip checking its shape.
+ */
+export async function mergeHealedRegistry(incoming = {}) {
+  const registry = await getRegistry();
+  let merged = 0;
+  for (const [host, fields] of Object.entries(incoming || {})) {
+    if (!host || !fields || typeof fields !== 'object') continue;
+    const forHost = { ...(registry[host] || {}) };
+    for (const [field, entry] of Object.entries(fields)) {
+      if (!entry || typeof entry.selector !== 'string' || !entry.selector.trim()) continue;
+      const existing = forHost[field];
+      if (existing && Date.parse(existing.healed_at || 0) >= Date.parse(entry.healed_at || 0)) continue;
+      forHost[field] = {
+        selector: entry.selector.trim(),
+        strategy: entry.strategy === 'xpath' ? 'xpath' : 'css',
+        confidence: typeof entry.confidence === 'number' ? entry.confidence : null,
+        source: 'healed',
+        healed_at: entry.healed_at || new Date().toISOString(),
+      };
+      merged++;
+    }
+    if (Object.keys(forHost).length) registry[host] = forHost;
+  }
+  if (merged) await saveRegistry(registry);
+  return { merged, registry };
 }
 
 export async function clearRegistry() {

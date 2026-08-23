@@ -8,7 +8,7 @@
  * renders it next to a price the user is about to act on.
  */
 import { formatMoney, formatCompact, positionPnl } from '../vendor/lib/advisor.js';
-import { sparkline, seriesOf, MIN_CHART_POINTS } from './sparkline.js';
+import { sparkline, seriesOf, MIN_CHART_POINTS, svgEl } from './sparkline.js';
 
 /* ------------------------------------------------------------------ *
  * Element helpers
@@ -57,6 +57,25 @@ export function append(parent, ...children) {
   return parent;
 }
 
+/**
+ * The product's mark: an open gauge ring with a rising line breaking out
+ * through the gap. The same shape as the toolbar icon and the popup's header,
+ * so the three surfaces read as one thing.
+ */
+export function brandMark() {
+  const svg = svgEl('svg', {
+    viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': '1.9',
+    'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'aria-hidden': 'true', focusable: 'false',
+  });
+  svg.append(
+    svgEl('path', { class: 'ring', d: 'M16.82 5.12A8.4 8.4 0 1 0 20.27 13.46' }),
+    svgEl('path', { d: 'M7.2 14.4 10.3 11.3l2.9 2.1 3.4-4.3' })
+  );
+  const holder = el('span.mark', { 'aria-hidden': 'true' });
+  holder.append(svg);
+  return holder;
+}
+
 /* ------------------------------------------------------------------ *
  * Formatting
  * ------------------------------------------------------------------ */
@@ -103,7 +122,7 @@ export function connectionBanner({ status, error, canConnect, onConnect, onRetry
   if (status === 'connected' && !error) return null;
   const disconnected = status === 'disconnected';
 
-  return el('div.banner', { class: disconnected ? 'banner-warn' : 'banner-error', role: 'status' },
+  return el('div.banner.pane', { class: disconnected ? 'banner-warn' : 'banner-error', role: 'status' },
     el('div.banner-body',
       el('strong', { text: disconnected ? 'Extension not reachable' : 'Something went wrong' }),
       el('p', { text: error || 'The dashboard could not read anything from the extension.' })),
@@ -165,7 +184,7 @@ export function summaryBar({ rows, lastLoadedAt }) {
     pnlKnown = true;
   }
 
-  return el('div.summary',
+  return el('div.summary.pane',
     stat('Watching', String(rows.length)),
     stat('Priced', `${priced.length}`),
     stat('Up / down', `${up} / ${down}`, up === down ? 'flat' : (up > down ? 'up' : 'down')),
@@ -337,7 +356,13 @@ function statusLine(entry, snapshot) {
   if (!snapshot) return 'not scanned yet';
   const at = snapshot.extracted_at || (entry && entry.last_refreshed_at);
   if (!at) return 'not scanned yet';
-  const how = entry && entry.last_method === 'fetch' ? ' · headless' : '';
+  // How it was read is worth showing: a headless fetch and a Bright Data session
+  // are very different things to have happened on your behalf, and the second
+  // one costs money.
+  const method = entry && entry.last_method;
+  const how = method === 'fetch' ? ' · headless'
+    : method === 'brightdata' ? ' · Bright Data'
+      : '';
   return `updated ${relativeTime(at)}${how}`;
 }
 
@@ -355,7 +380,7 @@ export function addForm({ onAdd }) {
     spellcheck: 'false', 'aria-label': 'Quote page URL',
   });
 
-  return el('form.add-form', {
+  return el('form.add-form.pane', {
     onSubmit: (event) => {
       event.preventDefault();
       const symbol = ticker.value.trim().toUpperCase();

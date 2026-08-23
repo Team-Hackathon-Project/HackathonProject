@@ -12,8 +12,10 @@
 import {
   MSG, OFFSCREEN_TARGET, OFFSCREEN_PATH, FIELDS, SNIPPET_LIMIT, FIELD_LABELS, FIELD_PHRASES, HEALABLE_FIELDS,
   EXTERNAL_ALLOWED, REFRESH_FETCH_TIMEOUT_MS, REFRESH_TAB_TIMEOUT_MS, REFRESH_GAP_MS,
+  REFRESH_BRIDGE_TIMEOUT_MS, BRIDGE_PROBE_TIMEOUT_MS, BRIGHTDATA_MODES,
   MONITOR_ALARM, MIN_MONITOR_MINUTES, MAX_MONITOR_MINUTES, DASHBOARD_PATH,
 } from './lib/constants.js';
+import { normalizeBridgeUrl, bridgeRoutes, bridgeOriginPattern, BRIDGE_PROTOCOL } from './lib/brightdata.js';
 import { candidatesFor, isPlausibleSelector } from './lib/selectors.js';
 import { buildSnapshot, isUsableSnapshot, valueFitsField, tickerFromUrl } from './lib/normalize.js';
 import { findStuckPrice } from './lib/verify.js';
@@ -22,7 +24,7 @@ import { heuristicAdvice, validateAdvice, buildAdvisoryContext } from './lib/adv
 import { healSelector, requestAdvice, LlmError, pingProvider, humanizeLlmError } from './lib/llm.js';
 import {
   getSettings, getPortfolio, getRegistry, recordHealedSelector, clearRegistry, forgetHealedSelector,
-  saveSnapshot, getSnapshots, recordDecision, getDecisions, recordHealEvent, getHealLog,
+  saveSnapshot, getSnapshots, recordDecision, getDecisions, recordHealEvent, getHealLog, mergeHealedRegistry,
   recordPricePoint, getPriceHistory, savePosition,
   getWatchlist, saveWatchEntry, removeWatchEntry, seedWatchlistFromSnapshots,
   getAlertRules, saveAlertRule, applyRuleUpdates, deleteAlertRule, deleteAlertRulesFor,
@@ -568,6 +570,155 @@ async function refreshAutoTargets(snapshot) {
  * asked for one host at a time, from a gesture, and can be taken back.
  * ------------------------------------------------------------------ */
 
+/* ------------------------------------------------------------------ *
+ * The Bright Data bridge
+ *
+ * Bright Data's Scraping Browser is a remote Chrome addressed over CDP at
+ *
+ *     wss://brd-customer-<id>-zone-<zone>:<password>@brd.superproxy.io:9222
+ *
+ * and this worker cannot open that socket. The HTML standard requires the
+ * `WebSocket` constructor to throw a SyntaxError when the URL includes
+ * credentials, Chrome implements exactly that, and the API exposes no headers
+ * to carry the auth some other way. So the session lives in the Node agent
+ * under `agent/`, and the worker talks to it over loopback HTTP.
+ *
+ * What comes back is a finished snapshot built by the same `normalize.js` this
+ * file uses, plus whatever selectors the agent had to repair to produce it —
+ * which are merged straight into the registry, so a repair made out there is
+ * one the popup already has the next time the user scans that host.
+ * ------------------------------------------------------------------ */
+
+/** Resolves the bridge configuration, or explains why there is not one. */
+export function bridgeSettings(settings) {
+  const stored = (settings && settings.brightdata) || {};
+  const mode = BRIGHTDATA_MODES.includes(stored.mode) ? stored.mode : 'fallback';
+  const normalized = normalizeBridgeUrl(stored.bridgeUrl);
+  if (!normalized.ok) {
+    return { enabled: false, mode, token: '', origin: null, routes: null, error: normalized.error };
+  }
+  return {
+    enabled: stored.enabled === true,
+    mode,
+    token: (stored.token || '').trim(),
+    origin: normalized.url,
+    routes: bridgeRoutes(normalized.url),
+    error: null,
+  };
+}
+
+/** True when the user has granted the worker access to the bridge's origin. */
+export async function hasBridgeAccess(bridge) {
+  const origin = bridge && bridge.origin && bridgeOriginPattern(bridge.origin);
+  if (!origin) return false;
+  try {
+    return await chrome.permissions.contains({ origins: [origin] });
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * One request to the agent.
+ *
+ * Every failure mode is turned into a sentence naming the agent, because the
+ * overwhelmingly likely cause is that it is not running — and "Failed to fetch"
+ * does not say so.
+ */
+async function callBridge(bridge, url, { method = 'GET', body = null, timeoutMs = BRIDGE_PROBE_TIMEOUT_MS } = {}) {
+  if (!bridge.origin) throw new Error(bridge.error || 'No bridge address configured.');
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const headers = { accept: 'application/json' };
+  if (bridge.token) headers['x-bridge-token'] = bridge.token;
+  if (body) headers['content-type'] = 'application/json';
+
+  let response;
+  try {
+    response = await fetch(url, {
+      method,
+      headers,
+      body: body ? JSON.stringify(body) : undefined,
+      signal: controller.signal,
+      credentials: 'omit',
+    });
+  } catch (error) {
+    const aborted = error && (error.name === 'AbortError' || controller.signal.aborted);
+    throw new Error(aborted
+      ? `The Bright Data agent did not answer within ${Math.round(timeoutMs / 1000)}s.`
+      : `Could not reach the Bright Data agent at ${bridge.origin}. Start it with \`npm run agent\`.`);
+  } finally {
+    clearTimeout(timer);
+  }
+
+  const text = await response.text();
+  let parsed = null;
+  try {
+    parsed = text ? JSON.parse(text) : null;
+  } catch {
+    parsed = null;
+  }
+  if (response.status === 401) throw new Error('The Bright Data agent rejected the bridge token.');
+  if (!response.ok) {
+    throw new Error((parsed && parsed.error) || `The Bright Data agent returned HTTP ${response.status}.`);
+  }
+  if (!parsed) throw new Error('The Bright Data agent returned a non-JSON body.');
+  return parsed;
+}
+
+/** Reads `/health`: what the agent is configured with, and whether it can heal. */
+export async function probeBridge(settings) {
+  const bridge = bridgeSettings(settings);
+  if (!bridge.origin) return { ok: false, error: bridge.error || 'No bridge address configured.' };
+  if (!(await hasBridgeAccess(bridge))) {
+    return {
+      ok: false,
+      needsPermission: bridgeOriginPattern(bridge.origin),
+      error: `Access to ${bridge.origin} has not been granted yet.`,
+    };
+  }
+  const health = await callBridge(bridge, bridge.routes.health);
+  if (health.protocol !== BRIDGE_PROTOCOL) {
+    return {
+      ok: false,
+      error: `The agent speaks bridge protocol ${health.protocol}, this extension speaks ${BRIDGE_PROTOCOL}. Update whichever is older.`,
+      health,
+    };
+  }
+  return { ok: health.ok === true, health, error: health.ok === true ? null : (health.brightdata && health.brightdata.error) || 'The agent is running but Bright Data is not configured.' };
+}
+
+/**
+ * Asks the agent to read one quote page through the Scraping Browser.
+ *
+ * The extension's own healed selectors go out with the request and the agent's
+ * come back with the answer, so neither side has to be the one that repaired a
+ * field for both to benefit from it.
+ */
+async function bridgeScrape(bridge, { url, ticker, selfHeal = true }) {
+  const result = await callBridge(bridge, bridge.routes.scrape, {
+    method: 'POST',
+    timeoutMs: REFRESH_BRIDGE_TIMEOUT_MS,
+    body: { url, ticker, selfHeal, registry: await getRegistry() },
+  });
+  if (result && result.registry) {
+    const { merged } = await mergeHealedRegistry(result.registry);
+    if (merged) result.merged_selectors = merged;
+  }
+  for (const entry of (result && result.healed) || []) {
+    await recordHealEvent({
+      field: entry.field,
+      host: result.host || hostOf(url),
+      at: new Date().toISOString(),
+      healed: true,
+      via: 'brightdata',
+      proposed: entry.selector,
+      strategy: entry.strategy,
+    });
+  }
+  return result;
+}
+
 /** The `https://host/*` pattern one URL needs permission for. */
 export function originPatternFor(url) {
   try {
@@ -694,7 +845,18 @@ export async function refreshTicker(ticker, { allowTab = true } = {}) {
   if (!url || !isScrapableUrl(url)) {
     return refreshFailed(symbol, 'No quote page URL is stored for this ticker.');
   }
-  if (!(await hasOriginAccess(url))) {
+
+  const settings = await getSettings();
+  const bridge = bridgeSettings(settings);
+  const bridgeReady = bridge.enabled && (await hasBridgeAccess(bridge));
+
+  // Two different permissions are in play, and they are not interchangeable.
+  // The local routes read the quote page from this browser, so they need the
+  // quote host. The Bright Data route never touches it — the agent's remote
+  // browser does — so it needs the bridge origin instead, and a host the user
+  // has not granted is still readable that way.
+  const localAllowed = await hasOriginAccess(url);
+  if (!localAllowed && !bridgeReady) {
     const origin = originPatternFor(url);
     return refreshFailed(symbol, `Access to ${hostOf(url)} has not been granted.`, { needs_permission: origin });
   }
@@ -704,42 +866,86 @@ export async function refreshTicker(ticker, { allowTab = true } = {}) {
   const anchorText = tickerFromUrl(url) || symbol;
 
   let result = null;
+  let snapshot = null;
   let method = null;
+  let healed = [];
   const notes = [];
 
-  // 1. The cheap path: no tab, no render.
-  try {
-    const html = await fetchWithTimeout(url, REFRESH_FETCH_TIMEOUT_MS);
-    const extracted = await extractFromHtml(html, candidates);
-    if (valueFitsField('price', extracted.raw.price)) {
-      result = extracted;
-      method = 'fetch';
-    } else {
-      notes.push('the served HTML carried no price');
+  /** The cheap path: no tab, no render, no third party. */
+  const tryFetch = async () => {
+    if (!localAllowed) {
+      notes.push(`fetch skipped (access to ${hostOf(url)} has not been granted)`);
+      return;
     }
-  } catch (error) {
-    notes.push(`fetch failed (${String((error && error.message) || error)})`);
-  } finally {
-    await closeOffscreen();
-  }
+    try {
+      const html = await fetchWithTimeout(url, REFRESH_FETCH_TIMEOUT_MS);
+      const extracted = await extractFromHtml(html, candidates);
+      if (valueFitsField('price', extracted.raw.price)) {
+        result = extracted;
+        method = 'fetch';
+      } else {
+        notes.push('the served HTML carried no price');
+      }
+    } catch (error) {
+      notes.push(`fetch failed (${String((error && error.message) || error)})`);
+    } finally {
+      await closeOffscreen();
+    }
+  };
 
-  // 2. The real render, for the pages that paint their price with JavaScript.
-  if (!result && allowTab) {
+  /** Bright Data: a real remote browser, and the self-healing loop with it. */
+  const tryBridge = async () => {
+    if (!bridgeReady) {
+      if (bridge.enabled) notes.push(`Bright Data skipped (access to ${bridge.origin || 'the agent'} has not been granted)`);
+      return;
+    }
+    try {
+      const answer = await bridgeScrape(bridge, { url, ticker: symbol, selfHeal: settings.selfHealEnabled !== false });
+      if (answer && answer.ok && answer.snapshot) {
+        snapshot = answer.snapshot;
+        method = 'brightdata';
+        healed = answer.healed || [];
+        for (const warning of answer.warnings || []) notes.push(warning);
+      } else {
+        notes.push(`Bright Data could not read the page (${(answer && answer.error) || 'no reason given'})`);
+      }
+    } catch (error) {
+      notes.push(`Bright Data failed (${String((error && error.message) || error)})`);
+    }
+  };
+
+  /** The local render, for pages that paint their price with JavaScript. */
+  const tryTab = async () => {
+    if (!allowTab || !localAllowed) return;
     try {
       result = await extractFromTab(url, candidates, anchorText);
       method = 'tab';
     } catch (error) {
       notes.push(`opening the page failed (${String((error && error.message) || error)})`);
     }
+  };
+
+  // `mode` is the user's call on how much of their Bright Data plan a routine
+  // refresh may spend: last resort, first choice, or the only route allowed.
+  const order = !bridge.enabled ? [tryFetch, tryTab]
+    : bridge.mode === 'only' ? [tryBridge]
+      : bridge.mode === 'first' ? [tryBridge, tryFetch, tryTab]
+        : [tryFetch, tryBridge, tryTab];
+
+  for (const attempt of order) {
+    if (result || snapshot) break;
+    await attempt();
   }
 
-  if (!result) return refreshFailed(symbol, notes.join('; ') || 'the page could not be read');
+  if (!result && !snapshot) return refreshFailed(symbol, notes.join('; ') || 'the page could not be read');
 
-  const selectorsUsed = {};
-  for (const [field, used] of Object.entries(result.used || {})) {
-    selectorsUsed[`${field}_selector`] = used.selector;
+  if (!snapshot) {
+    const selectorsUsed = {};
+    for (const [field, used] of Object.entries(result.used || {})) {
+      selectorsUsed[`${field}_selector`] = used.selector;
+    }
+    snapshot = buildSnapshot(result.raw, { source_url: url, selectors_used: selectorsUsed });
   }
-  const snapshot = buildSnapshot(result.raw, { source_url: url, selectors_used: selectorsUsed });
 
   // A price read off the wrong page is worse than no reading at all: it would be
   // filed under this symbol and charted as its history.
@@ -769,7 +975,7 @@ export async function refreshTicker(ticker, { allowTab = true } = {}) {
     needs_permission: null,
   });
 
-  return { ticker: symbol, ok: true, method, snapshot, previous, notes };
+  return { ticker: symbol, ok: true, method, snapshot, previous, notes, healed };
 }
 
 /**
@@ -1204,6 +1410,81 @@ export async function handleRequest(message) {
       const started = Date.now();
       const probe = await pingProvider({ provider: definition.id, model, apiKey });
       return { provider: definition.id, label: definition.label, model, ms: Date.now() - started, ...probe };
+    }
+    case MSG.TEST_BRIDGE: {
+      // Same shape as TEST_PROVIDER: the payload lets the options page check an
+      // address and token before committing them to storage.
+      const stored = await getSettings();
+      const payload = message.payload || {};
+      const settings = {
+        ...stored,
+        brightdata: {
+          ...stored.brightdata,
+          ...(payload.bridgeUrl === undefined ? {} : { bridgeUrl: payload.bridgeUrl }),
+          ...(payload.token === undefined ? {} : { token: payload.token }),
+        },
+      };
+      const started = Date.now();
+      const probe = await probeBridge(settings);
+      return { ...probe, ms: Date.now() - started, origin: bridgeSettings(settings).origin };
+    }
+    case MSG.SCRAPE_VIA_BRIDGE: {
+      // An explicit, user-initiated read through the Scraping Browser. Unlike a
+      // refresh it does not require the ticker to be on the watchlist already —
+      // scraping something is the clearest statement of interest there is, so
+      // it goes on the list the same way a tab scan does.
+      const settings = await getSettings();
+      const bridge = bridgeSettings(settings);
+      if (!bridge.enabled) throw new Error('Bright Data is switched off in the extension options.');
+      if (!(await hasBridgeAccess(bridge))) {
+        const error = new Error(`Access to ${bridge.origin} has not been granted yet. Grant it on the options page.`);
+        error.needsPermission = bridgeOriginPattern(bridge.origin);
+        throw error;
+      }
+      const payload = message.payload || {};
+      const symbol = tickerOf(payload.ticker);
+      const url = String(payload.url || '').trim() || (symbol ? defaultQuoteUrl(symbol) : '');
+      if (!url) throw new Error('A ticker or a quote page URL is required.');
+      if (!isScrapableUrl(url)) throw new Error('That is not an http(s) quote page URL.');
+
+      const answer = await bridgeScrape(bridge, {
+        url,
+        ticker: symbol,
+        selfHeal: settings.selfHealEnabled !== false,
+      });
+      if (!answer || !answer.ok || !answer.snapshot) {
+        throw new Error((answer && answer.error) || 'Bright Data could not read that page.');
+      }
+      const snapshot = answer.snapshot;
+      if (symbol) snapshot.ticker = symbol;
+
+      // Everything a tab scan records, recorded the same way — a snapshot read
+      // through Bright Data is not a lesser reading.
+      let targets = null;
+      if (isUsableSnapshot(snapshot)) {
+        await saveSnapshot(snapshot);
+        await recordPricePoint(snapshot);
+        await saveWatchEntry(snapshot.ticker, {
+          source_url: snapshot.source_url || url,
+          last_refreshed_at: snapshot.extracted_at,
+          last_method: 'brightdata',
+          last_error: null,
+          needs_permission: null,
+        });
+        targets = await refreshAutoTargets(snapshot);
+      }
+      return {
+        snapshot,
+        usable: isUsableSnapshot(snapshot),
+        method: 'brightdata',
+        healed: answer.healed || [],
+        warnings: answer.warnings || [],
+        notices: answer.notices || [],
+        captcha: answer.captcha || null,
+        host: answer.host || hostOf(url),
+        targets,
+        duration_ms: answer.duration_ms || null,
+      };
     }
     default:
       throw new Error(`Unknown message type: ${message.type}`);

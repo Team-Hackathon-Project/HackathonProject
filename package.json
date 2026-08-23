@@ -17,9 +17,13 @@
     "e2e:provider": "node e2e/provider-check.mjs",
     "e2e:live": "node e2e/live-quote.mjs",
     "e2e:targets": "node e2e/auto-targets.mjs",
-    "e2e:dashboard": "node e2e/dashboard.mjs"
+    "e2e:dashboard": "node e2e/dashboard.mjs",
+    "agent": "node agent/server.mjs",
+    "brightdata": "node agent/cli.mjs",
+    "brightdata:check": "node agent/cli.mjs --check",
+    "e2e:brightdata": "node e2e/brightdata.mjs"
   },
-  "devDependencies": {
+  "dependencies": {
     "jsdom": "^30.0.1",
     "puppeteer-core": "^23.11.1"
   }

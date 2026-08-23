@@ -14,7 +14,7 @@ import {
 } from './state.js';
 import {
   el, connectionBanner, connectPanel, summaryBar, watchCard, addForm, emptyState, detailDrawer,
-  watchlistHeading, disconnectedState, advisorNote,
+  watchlistHeading, disconnectedState, advisorNote, brandMark,
 } from './render.js';
 import {
   monitorControl, alertFeed, ruleSection, toaster, requestWebNotifications,
@@ -22,6 +22,16 @@ import {
 
 const root = document.getElementById('app');
 let showConnectPanel = false;
+
+/**
+ * Whether the first paint has happened.
+ *
+ * The whole view is rebuilt on every state change, so an entrance animation
+ * left switched on would replay every time a background poll lands. The
+ * stagger is therefore a one-shot: the class goes on for the first render and
+ * comes off once it has played out.
+ */
+let painted = false;
 
 // The toast stack lives outside the re-rendered tree: a toast that vanished
 // because a background poll rebuilt the page would be a toast nobody read.
@@ -154,9 +164,11 @@ function render(state) {
 
   const children = [
     el('header.top',
-      el('div.top-title',
-        el('h1', { text: 'Market Dashboard' }),
-        el('p.muted.small', { text: subtitleFor(state) })),
+      el('div.brand.top-title',
+        brandMark(),
+        el('div.brand-text',
+          el('h1', { text: 'Market Dashboard' }),
+          el('p.muted.small', { text: subtitleFor(state) }))),
       el('div.top-actions',
         state.data ? advisorNote(state.data) : null,
         state.data
@@ -235,6 +247,14 @@ function render(state) {
 
   root.replaceChildren(...children.filter(Boolean));
   restoreFocus(saved);
+
+  if (!painted) {
+    painted = true;
+    root.classList.add('stagger');
+    // Long enough for the last delayed pane to finish, short enough that a
+    // poll landing afterwards does not re-run the sequence.
+    setTimeout(() => root.classList.remove('stagger'), 900);
+  }
 }
 
 document.addEventListener('keydown', (event) => {

@@ -6,7 +6,8 @@
  * trip needed — except for the registry reset, which goes through the worker
  * so the reset is logged in one place.
  */
-import { MSG, DASHBOARD_PATH } from './lib/constants.js';
+import { MSG, DASHBOARD_PATH, BRIGHTDATA_MODES } from './lib/constants.js';
+import { normalizeBridgeUrl, bridgeOriginPattern, DEFAULT_BRIDGE_URL } from './lib/brightdata.js';
 import {
   getSettings, saveSettings, getPortfolio, savePosition, getRegistry, getHealLog, getWatchlist,
 } from './lib/storage.js';
@@ -564,6 +565,199 @@ el('reset-registry').addEventListener('click', async () => {
  * and `history.replaceState` is used rather than assigning `location.hash` so
  * clicking through the rail does not fill the back button with settings panels.
  */
+/* ------------------------------------------------------------------ *
+ * Bright Data
+ *
+ * The extension cannot dial the Scraping Browser itself — the endpoint carries
+ * credentials in the URL, which `new WebSocket()` is required to refuse — so
+ * everything here configures the local agent that can, and the loopback address
+ * this extension reaches it on. The credentials themselves never come near this
+ * page: they live in the agent's `.env`.
+ * ------------------------------------------------------------------ */
+
+let brightdataDirty = false;
+
+function setBrightdataDirty(value) {
+  brightdataDirty = value;
+  el('bd-dirty').classList.toggle('hidden', !value);
+}
+
+function readBrightdataForm() {
+  const mode = el('bd-mode').value;
+  return {
+    enabled: el('bd-enabled').checked,
+    bridgeUrl: el('bd-url').value.trim(),
+    token: el('bd-token').value,
+    mode: BRIGHTDATA_MODES.includes(mode) ? mode : 'fallback',
+  };
+}
+
+async function renderBrightdata() {
+  const settings = await getSettings();
+  const stored = settings.brightdata || {};
+  el('bd-enabled').checked = stored.enabled === true;
+  el('bd-url').value = stored.bridgeUrl || DEFAULT_BRIDGE_URL;
+  el('bd-token').value = stored.token || '';
+  el('bd-mode').value = BRIGHTDATA_MODES.includes(stored.mode) ? stored.mode : 'fallback';
+  setBrightdataDirty(false);
+  // Says what the panel is waiting for, rather than leaving a blank space where
+  // the agent's report will eventually be.
+  renderBrightdataReport(null);
+  await renderBrightdataAccess();
+}
+
+/** One row saying whether the worker may talk to the address in the box. */
+async function renderBrightdataAccess() {
+  const pattern = bridgeOriginPattern(el('bd-url').value.trim());
+  const button = el('bd-grant');
+  if (!pattern) {
+    button.disabled = true;
+    button.textContent = 'Grant access';
+    return null;
+  }
+  button.disabled = false;
+  let granted = false;
+  try {
+    granted = await chrome.permissions.contains({ origins: [pattern] });
+  } catch {
+    granted = false;
+  }
+  button.textContent = granted ? 'Revoke access' : 'Grant access';
+  button.className = granted ? 'btn small' : 'btn primary small';
+  return { pattern, granted };
+}
+
+/** Renders what `/health` reported. None of it is secret — see `agent/server.mjs`. */
+function renderBrightdataReport(probe) {
+  const list = el('bd-report');
+  list.replaceChildren();
+  const health = probe && probe.health;
+  if (!health) {
+    renderEmpty(list, 'Press "Test agent" to see what the agent is configured with.');
+    return;
+  }
+  const rows = [
+    ['Agent', `bridge protocol ${health.protocol}${health.tokenRequired ? ' · token required' : ' · no token set'}`],
+    ['Bright Data', health.brightdata && health.brightdata.configured
+      ? String(health.brightdata.description)
+      : `not configured — ${(health.brightdata && health.brightdata.error) || 'unknown reason'}`],
+    ['Endpoint', (health.brightdata && health.brightdata.redacted) || '—'],
+    ['Self-healing', health.selfHealing && health.selfHealing.available
+      ? `on · ${health.llm.provider} · ${health.llm.model}`
+      : `off — ${(health.selfHealing && health.selfHealing.reason) || 'no model key'}`],
+  ];
+  for (const [title, detail] of rows) list.appendChild(entryRow({ title, detail }));
+
+  for (const event of (health.heals || []).slice(0, 5)) {
+    list.appendChild(entryRow({
+      title: event.host,
+      field: event.field,
+      detail: event.healed ? event.proposed : (event.error || 'not repaired'),
+      when: event.at,
+      status: event.healed ? 'ok' : 'warn',
+    }));
+  }
+}
+
+for (const id of ['bd-enabled', 'bd-url', 'bd-token', 'bd-mode']) {
+  el(id).addEventListener('input', () => setBrightdataDirty(true));
+  el(id).addEventListener('change', () => setBrightdataDirty(true));
+}
+el('bd-url').addEventListener('change', renderBrightdataAccess);
+
+// Called straight from the click: Chrome only honours a permission request
+// inside the user gesture that started it, which a service worker cannot supply.
+el('bd-grant').addEventListener('click', async () => {
+  const state = await renderBrightdataAccess();
+  if (!state) {
+    setStatus(el('bd-status'), 'Enter a valid loopback address first.', true);
+    return;
+  }
+  try {
+    const changed = state.granted
+      ? await chrome.permissions.remove({ origins: [state.pattern] })
+      : await chrome.permissions.request({ origins: [state.pattern] });
+    setStatus(el('bd-status'), changed
+      ? `${state.granted ? 'Revoked' : 'Granted'} access to ${state.pattern}.`
+      : 'Nothing changed.');
+  } catch (error) {
+    setStatus(el('bd-status'), String((error && error.message) || error), true);
+  }
+  await renderBrightdataAccess();
+});
+
+el('bd-test').addEventListener('click', async () => {
+  const form = readBrightdataForm();
+  const normalized = normalizeBridgeUrl(form.bridgeUrl);
+  if (!normalized.ok) {
+    setStatus(el('bd-status'), normalized.error, true);
+    return;
+  }
+  setStatus(el('bd-status'), 'Asking the agent…');
+  // Through the service worker, because that is the context that makes the real
+  // calls — a probe fired from this page would prove the wrong thing.
+  const response = await chrome.runtime.sendMessage({
+    type: MSG.TEST_BRIDGE,
+    payload: { bridgeUrl: form.bridgeUrl, token: form.token },
+  });
+  if (!response || !response.ok) {
+    setStatus(el('bd-status'), (response && response.error) || 'The agent could not be reached.', true);
+    renderBrightdataReport(null);
+    return;
+  }
+  const probe = response.data;
+  renderBrightdataReport(probe);
+  if (probe.ok) {
+    setStatus(el('bd-status'), `Agent answered in ${probe.ms} ms — ${probe.health.brightdata.description}.`);
+  } else {
+    setStatus(el('bd-status'), probe.error || 'The agent answered, but is not ready.', true);
+  }
+  await renderBrightdataAccess();
+});
+
+el('bd-scrape').addEventListener('click', async () => {
+  const ticker = el('bd-ticker').value.trim().toUpperCase();
+  if (!/^[A-Z][A-Z0-9.\-]{0,9}$/.test(ticker)) {
+    setStatus(el('bd-status'), 'Enter a ticker to read, such as AAPL.', true);
+    return;
+  }
+  if (brightdataDirty) {
+    setStatus(el('bd-status'), 'Save the settings first — the worker reads them from storage, not from this form.', true);
+    return;
+  }
+  setStatus(el('bd-status'), `Reading ${ticker} through the Scraping Browser — this takes a while…`);
+  const response = await chrome.runtime.sendMessage({ type: MSG.SCRAPE_VIA_BRIDGE, payload: { ticker } });
+  if (!response || !response.ok) {
+    setStatus(el('bd-status'), (response && response.error) || 'The scrape failed.', true);
+    return;
+  }
+  const { snapshot, healed, duration_ms: took } = response.data;
+  const repaired = healed.length ? ` Repaired ${healed.map((entry) => entry.field).join(', ')}.` : '';
+  setStatus(el('bd-status'), `${snapshot.ticker} at ${snapshot.current_price} ${snapshot.currency} in ${Math.round((took || 0) / 1000)}s.${repaired}`);
+  el('bd-ticker').value = '';
+  // A repair made out there lands in this machine's registry, so the two lists
+  // below are stale the moment the scrape returns.
+  await Promise.all([renderRegistry(), renderHealLog()]);
+});
+
+el('bd-ticker').addEventListener('keydown', (event) => {
+  if (event.key === 'Enter') el('bd-scrape').click();
+});
+
+el('bd-save').addEventListener('click', async () => {
+  const form = readBrightdataForm();
+  const normalized = normalizeBridgeUrl(form.bridgeUrl);
+  if (!normalized.ok) {
+    setStatus(el('bd-status'), normalized.error, true);
+    return;
+  }
+  await saveSettings({ brightdata: { ...form, bridgeUrl: normalized.url } });
+  await renderBrightdata();
+  setStatus(el('bd-status'), form.enabled
+    ? 'Saved. Refreshes will use the Scraping Browser once the agent is running.'
+    : 'Saved. Bright Data is switched off.');
+});
+
 /**
  * The hash, read defensively.
  *
@@ -615,7 +809,9 @@ function setupTabs() {
 }
 
 (async function init() {
-  await Promise.all([renderSettings(), renderPortfolio(), renderRegistry(), renderHealLog(), renderAccess()]);
+  await Promise.all([
+    renderSettings(), renderPortfolio(), renderRegistry(), renderHealLog(), renderAccess(), renderBrightdata(),
+  ]);
   shownProvider = el('provider').value;
   setupTabs();
 })();
