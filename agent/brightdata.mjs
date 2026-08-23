@@ -75,14 +75,21 @@ export function describeConnectError(error) {
  * `endpoint` is the raw `wss://…` string; it is parsed here so a malformed one
  * fails with a sentence rather than a socket error.
  */
-export async function connectBrightData({ endpoint, connectTimeoutMs = 60000, log = () => {} }) {
+export async function connectBrightData({
+  endpoint, connectTimeoutMs = 60000, navigationTimeoutMs = 120000, log = () => {},
+}) {
   const parsed = parseEndpoint(endpoint);
   if (!parsed.ok) throw new Error(parsed.error);
   log(`connecting to Bright Data — ${describeEndpoint(parsed)}`);
   try {
     const browser = await puppeteer.connect({
       browserWSEndpoint: parsed.endpoint,
-      protocolTimeout: connectTimeoutMs,
+      // `protocolTimeout` bounds every CDP call on this connection, and the
+      // longest of those is the navigation. Setting it to the *connect* budget
+      // caps a 120s navigation at 60s, which surfaces as "Page.navigate timed
+      // out" — a timeout on the wrong clock, blaming the page for a limit it
+      // was never given. It has to cover the longest call, with headroom.
+      protocolTimeout: Math.max(connectTimeoutMs, navigationTimeoutMs + 30000),
     });
     log('connected');
     return browser;
@@ -209,7 +216,12 @@ export async function withQuotePage({ endpoint, url, tuning = {}, log = () => {}
 }
 
 async function runOnce({ endpoint, url, tuning, log }, run) {
-  const browser = await connectBrightData({ endpoint, connectTimeoutMs: tuning.connectTimeoutMs, log });
+  const browser = await connectBrightData({
+    endpoint,
+    connectTimeoutMs: tuning.connectTimeoutMs,
+    navigationTimeoutMs: tuning.navigationTimeoutMs,
+    log,
+  });
   let page = null;
   try {
     const opened = await openQuotePage(browser, url, tuning, log);

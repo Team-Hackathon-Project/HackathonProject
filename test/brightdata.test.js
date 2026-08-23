@@ -243,3 +243,56 @@ test('the description lifts the pin out of the zone name so it reads as what it 
   assert.match(described, /zone scraping_browser1 /, 'the zone name is shown without the suffix glued on');
   assert.match(described, /exit country us/);
 });
+
+/**
+ * A live run once failed with `normalizeTicker is not defined` while the whole
+ * unit suite stayed green: `export … from` publishes a name to importers but
+ * does not bind it in the exporting module's own scope, so every test that
+ * imported the helper passed while the scrape that *calls* it threw. This
+ * reaches the scrape's own call sites, which is where the difference shows.
+ */
+test('the scrape resolves its ticker helpers in its own scope', async () => {
+  const { scrapeThroughBrightData } = await import('../agent/scrape.mjs');
+  await assert.rejects(
+    () => scrapeThroughBrightData({
+      ticker: 'aapl',
+      config: { ok: false, endpoint: { ok: false, error: 'endpoint not configured' } },
+      selfHeal: false,
+    }),
+    (error) => {
+      assert.doesNotMatch(error.message, /is not defined/, error.message);
+      assert.match(error.message, /endpoint not configured/);
+      return true;
+    }
+  );
+});
+
+/**
+ * `protocolTimeout` bounds every CDP call on the connection, and the longest of
+ * those is the navigation. Setting it to the connect budget caps a 120s
+ * navigation at 60s, which surfaces as "Page.navigate timed out" — a timeout on
+ * the wrong clock, blaming the page for a limit it was never given.
+ */
+test('the connection outlives the navigation it has to carry', async () => {
+  const { connectBrightData } = await import('../agent/brightdata.mjs');
+  const seen = [];
+  const puppeteer = (await import('puppeteer-core')).default;
+  const realConnect = puppeteer.connect;
+  puppeteer.connect = async (options) => {
+    seen.push(options);
+    return { mock: true };
+  };
+  try {
+    await connectBrightData({ endpoint: ENDPOINT, connectTimeoutMs: 60000, navigationTimeoutMs: 120000 });
+    assert.ok(
+      seen[0].protocolTimeout >= 120000,
+      `protocolTimeout ${seen[0].protocolTimeout} must cover a 120000ms navigation`
+    );
+
+    // A connect budget larger than the navigation still wins.
+    await connectBrightData({ endpoint: ENDPOINT, connectTimeoutMs: 300000, navigationTimeoutMs: 5000 });
+    assert.equal(seen[1].protocolTimeout, 300000);
+  } finally {
+    puppeteer.connect = realConnect;
+  }
+});

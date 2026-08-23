@@ -116,3 +116,29 @@ export const INDEX_RAIL_PAGE = `
     <tr><td>TSLA</td><td>396.10</td></tr>
   </table>
 </body></html>`;
+
+/**
+ * A page carrying the ticker twice: once in its own heading, and once as a bare
+ * chip inside an advertising slot that also holds a percentage. Anchoring on
+ * the shortest text containing the symbol picks the chip, and the container
+ * capture then hands the model an ad instead of the quote.
+ */
+export const TICKER_CHIP_PAGE = `
+<!doctype html>
+<html><head><title>Apple Inc. (AAPL) Stock Price</title></head>
+<body>
+  <main>
+    <div class="ad-slot" id="promo-300x250">
+      <span>AAPL</span>
+      <span class="promo-pct">+99.90%</span>
+      <p>Trade commission free today</p>
+    </div>
+    <div class="quote-header">
+      <h1>Apple Inc. (AAPL)</h1>
+      <div class="quote-strip-v2">
+        <span class="qz-8f31ab">224.50</span>
+        <span class="qz-delta-19c">-1.95 (+1.80%)</span>
+      </div>
+    </div>
+  </main>
+</body></html>`;

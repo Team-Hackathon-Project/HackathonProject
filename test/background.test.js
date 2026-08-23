@@ -307,20 +307,50 @@ test('a rejected selector is sent back to the model with the reason', async () =
   assert.equal(priceAttempts.find((entry) => entry.attempt === 2).healed, true);
 });
 
-test('an honest "the metric is not here" is not retried', async () => {
+test('a refusal contradicted by the fragment is challenged, not accepted', async () => {
+  // Seen live: the model answered "the fragment does not contain any element
+  // representing the change_percentage metric" about a fragment that held
+  // "-1.95 (-0.63%)". The claim is checkable, so it gets checked.
   const url = 'https://finance.yahoo.com/quote/AAPL';
   const storage = makeStorage({ [STORAGE_KEYS.SETTINGS]: { apiKey: 'sk-ant-test' } });
   installChrome({ storage, tab: { url }, tabHandler: pageBackedTabHandler(BROKEN_PAGE, url), offscreenHandler: offscreenSanitize });
-  const fetchImpl = stubFetch(messageResponse({
-    selector: '', strategy: 'css', confidence: 0, reason: 'The fragment does not contain that metric.',
-  }));
-  globalThis.fetch = fetchImpl;
 
-  await background.scrapeActiveTab();
+  const answers = {
+    price: '.qz-8f31ab',
+    change_percentage: '.qz-delta-19c',
+    volume: '.qz-vol-77a',
+    news: '.story h3',
+    ticker: '.hdr-2026 h1',
+  };
+  const prompts = [];
+  const asked = {};
+  globalThis.fetch = stubFetch(async (_url, init) => {
+    const body = JSON.parse(init.body);
+    const content = body.messages[0].content;
+    prompts.push(content);
+    const field = (/Metric that failed: (\w+)/.exec(content) || [])[1] || 'unknown';
+    asked[field] = (asked[field] || 0) + 1;
+
+    // The change field is refused once, wrongly — everything else answers
+    // straight away, so the retry under test is the only one in play.
+    const payload = field === 'change_percentage' && asked[field] === 1
+      ? { selector: '', strategy: 'css', confidence: 0, reason: 'The fragment does not contain that metric.' }
+      : { selector: answers[field] || '.qz-8f31ab', strategy: 'css', confidence: 0.9, reason: 'the value node' };
+    return {
+      ok: true, status: 200, statusText: '200',
+      async text() { return JSON.stringify(messageResponse(payload).json); },
+    };
+  });
+
+  const result = await background.scrapeActiveTab();
+
+  assert.equal(result.snapshot.change_percentage, '+1.80%', 'the second ask recovered it');
+  const challenged = prompts.filter((p) => /You said the metric is absent/.test(p));
+  assert.equal(challenged.length, 1, 'the contradiction is put to the model once');
+  assert.match(challenged[0], /1\.80%/, 'and it quotes the evidence from the fragment');
 
   const healLog = (await storage.local.get(STORAGE_KEYS.HEAL_LOG))[STORAGE_KEYS.HEAL_LOG] || [];
-  const priceAttempts = healLog.filter((entry) => entry.field === 'price');
-  assert.equal(priceAttempts.length, 1, 'asking again cannot conjure a metric that is not there');
+  assert.equal(healLog.filter((entry) => entry.field === 'change_percentage').length, 2);
 });
 
 test('a page-wide selector from the model is rejected before it reaches the page', async () => {

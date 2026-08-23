@@ -17,7 +17,7 @@ import {
 } from './lib/constants.js';
 import { normalizeBridgeUrl, bridgeRoutes, bridgeOriginPattern, BRIDGE_PROTOCOL } from './lib/brightdata.js';
 import { candidatesFor, isPlausibleSelector } from './lib/selectors.js';
-import { buildSnapshot, isUsableSnapshot, valueFitsField, tickerFromUrl } from './lib/normalize.js';
+import { buildSnapshot, isUsableSnapshot, valueFitsField, tickerFromUrl, fragmentMentions } from './lib/normalize.js';
 import { findStuckPrice } from './lib/verify.js';
 import { activeLlm, providerFor } from './lib/providers.js';
 import { heuristicAdvice, validateAdvice, buildAdvisoryContext } from './lib/advisor.js';
@@ -207,8 +207,19 @@ async function buildCandidateMap(host, registry) {
   return map;
 }
 
-/** Thrown when retrying would be pointless: the answer will not change. */
-class TerminalHealError extends Error {}
+/**
+ * Thrown when retrying would be pointless: the answer will not change.
+ *
+ * `kind` separates "we have nothing to send" from "the model says the metric is
+ * absent" — the second is a claim about a fragment we are holding, and so is
+ * checkable.
+ */
+class TerminalHealError extends Error {
+  constructor(message, { kind = 'terminal' } = {}) {
+    super(message);
+    this.kind = kind;
+  }
+}
 
 const labelFor = (field) => FIELD_LABELS[field] || field;
 const phraseFor = (field) => FIELD_PHRASES[field] || field;
@@ -239,7 +250,7 @@ async function attemptHeal({ tabId, host, field, snippetHtml, tried, llm, feedba
   // useful to the user than "unusable selector: ". Asking again will not
   // conjure a metric the fragment does not hold.
   if (proposal.confidence <= 0 || !proposal.selector) {
-    throw new TerminalHealError(proposal.reason || 'model reported the metric is not in the snippet');
+    throw new TerminalHealError(proposal.reason || 'model reported the metric is not in the snippet', { kind: 'absent' });
   }
   if (!isPlausibleSelector(proposal)) throw new Error(`model returned an unusable selector: ${proposal.selector}`);
 
@@ -292,9 +303,18 @@ async function healField({ tabId, host, field, snippet, tried, settings }) {
       lastError = error instanceof LlmError ? error.message : String((error && error.message) || error);
       entry.error = lastError;
       await recordHealEvent(entry);
-      // A transport failure or an honest "it is not in there" will not improve
-      // on a second ask; a rejected selector often will.
-      if (error instanceof TerminalHealError || error instanceof LlmError) break;
+      if (error instanceof LlmError) break;
+      if (error instanceof TerminalHealError) {
+        // "It is not in there" is normally final — asking again cannot conjure
+        // an absent value. But it is a claim, and the fragment is right here:
+        // when it plainly holds a value of the right shape the claim is wrong,
+        // and giving up on it loses a repair that was available.
+        const evidence = error.kind === 'absent' ? fragmentMentions(field, snippetHtml) : null;
+        if (!evidence || attempt >= MAX_HEAL_ATTEMPTS) break;
+        feedback = `You said the metric is absent, but the fragment contains "${evidence}", `
+          + `which looks like a ${field}. Find the element holding it.`;
+        continue;
+      }
       feedback = lastError;
     }
   }

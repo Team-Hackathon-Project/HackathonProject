@@ -23,7 +23,12 @@ import { isUsableSnapshot } from '../src/lib/normalize.js';
  */
 // Defined in a leaf module so the Scraper Studio client can share them without
 // importing this file, which would close an import cycle back through config.
-export { defaultQuoteUrl, normalizeTicker } from './tickers.mjs';
+// Imported as well as re-exported: `export … from` publishes the names to
+// importers without binding them in this module's own scope, and the scrape
+// below calls both.
+import { defaultQuoteUrl, normalizeTicker } from './tickers.mjs';
+
+export { defaultQuoteUrl, normalizeTicker };
 
 /**
  * Scrapes one quote page through Bright Data.

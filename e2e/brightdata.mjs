@@ -179,7 +179,8 @@ try {
   // reach it: a real Chrome with the real unpacked extension, the real service
   // worker making the bridge call, and the result landing in the real storage.
   extensionDir = stageExtension(['http://127.0.0.1/*', 'http://localhost/*']);
-  browser = await launch(extensionDir, 'market-scraper-e2e-brightdata');
+  // A remote-browser scrape has been seen to take 90s end to end.
+  browser = await launch(extensionDir, 'market-scraper-e2e-brightdata', { protocolTimeout: 240000 });
   const { extensionId } = await serviceWorker(browser);
   const page = await browser.newPage();
   // An uncaught exception on the options page does not fail a `page.evaluate`,
@@ -239,7 +240,14 @@ try {
 
   record('the options page raised no exceptions', pageErrors.length === 0, pageErrors.join(' | ') || 'clean');
 
-  await page.click('a[href="#brightdata"]');
+  // `page.click` waits on an intersection check in the page, which hangs when
+  // the tab is not the frontmost one — a backgrounded renderer is throttled and
+  // the CDP call never returns. Focus it, then click through the DOM directly.
+  await page.bringToFront().catch(() => {});
+  await page.evaluate(() => {
+    const link = document.querySelector('a[href="#brightdata"]');
+    if (link) link.click();
+  });
   await sleep(400);
   mkdirSync(OUT_DIR, { recursive: true });
   await page.screenshot({ path: path.join(OUT_DIR, 'options-brightdata.png'), fullPage: true });

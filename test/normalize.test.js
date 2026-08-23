@@ -2,8 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   cleanText, parsePrice, parseDecimal, parseChangePercentage, parseVolume,
-  parseTicker, tickerFromUrl, normalizeNews, buildSnapshot, isUsableSnapshot, detectCurrency, valueFitsField,
-} from '../src/lib/normalize.js';
+  parseTicker, tickerFromUrl, normalizeNews, buildSnapshot, isUsableSnapshot, detectCurrency, valueFitsField, fragmentMentions } from '../src/lib/normalize.js';
 
 test('cleanText strips zero-width, nbsp and collapses whitespace', () => {
   assert.equal(cleanText('  AA​PL   Inc\n\n'), 'AAPL Inc');
@@ -152,4 +151,26 @@ test('buildSnapshot refuses a percentage as the price', () => {
   const snapshot = buildSnapshot({ ticker: 'NVDA', price: '+2.41%' }, {});
   assert.equal(snapshot.current_price, null);
   assert.equal(isUsableSnapshot(snapshot), false);
+});
+
+test('fragmentMentions is what decides whether a refusal can be challenged', () => {
+  // The repair loop treats "the metric is not in this fragment" as final,
+  // because asking again cannot conjure an absent value. This is the check
+  // that keeps that rule honest: seen live, a model said exactly that about a
+  // fragment holding "-1.95 (-0.63%)".
+  assert.equal(fragmentMentions('change_percentage', '<span>-1.95 (-0.63%)</span>'), '-0.63%');
+  assert.equal(fragmentMentions('change_percentage', '<div><b>+1.80%</b></div>'), '+1.80%');
+  assert.equal(fragmentMentions('price', '<div class="x">224.50 USD</div>'), '224.50');
+  assert.equal(fragmentMentions('volume', '<td>Volume</td><td>48,591,535</td>'), '48,591,535');
+
+  // Nothing of the right shape: the refusal stands and the field is dropped.
+  assert.equal(fragmentMentions('change_percentage', '<div>no numbers here at all</div>'), null);
+  assert.equal(fragmentMentions('price', '<div>About our company</div>'), null);
+
+  // Prose has no shape to check, so a refusal about it is taken at its word.
+  assert.equal(fragmentMentions('news', '<h3>Apple beats expectations</h3>'), null);
+
+  assert.equal(fragmentMentions('price', ''), null);
+  assert.equal(fragmentMentions('price', null), null);
+  assert.equal(fragmentMentions('nonsense', '<div>1.23</div>'), null);
 });

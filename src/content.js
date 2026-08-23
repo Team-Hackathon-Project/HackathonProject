@@ -241,13 +241,27 @@
       const needle = String(anchorText).toUpperCase();
       const scope = document.querySelector('main') || document.body;
       const nodes = scope ? scope.querySelectorAll('h1,h2,h3,[role="heading"],span,div') : [];
+      // Rank by what the element *is*, then by how tightly it names the
+      // instrument. Shortest-text-wins on its own picks a bare "AAPL" chip in
+      // a peer table or an ad slot over the page's own "Apple Inc. (AAPL)"
+      // heading, and every later distance measurement is then taken from the
+      // wrong part of the page.
+      const rankOf = (node) => {
+        const tag = node.tagName.toLowerCase();
+        if (tag === 'h1') return 0;
+        if (tag === 'h2' || tag === 'h3' || node.getAttribute('role') === 'heading') return 1;
+        return 2;
+      };
       let best = null;
       for (let i = 0; i < nodes.length && i < 4000; i++) {
         const node = nodes[i];
         if (node.children.length > 2) continue;
         const text = (node.textContent || '').replace(/\s+/g, ' ').trim();
         if (!text || text.length > 80 || !text.toUpperCase().includes(needle)) continue;
-        if (!best || text.length < best.text.length) best = { node, text };
+        const rank = rankOf(node);
+        if (!best || rank < best.rank || (rank === best.rank && text.length < best.text.length)) {
+          best = { node, text, rank };
+        }
       }
       if (best) return best.node;
     }

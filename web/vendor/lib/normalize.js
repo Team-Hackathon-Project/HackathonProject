@@ -165,6 +165,34 @@ export function normalizeNews(items, limit = 5) {
   return out;
 }
 
+/** Shapes that betray a metric's presence in a block of markup. */
+const FRAGMENT_HINTS = {
+  ticker: /[A-Z][A-Z0-9.\-]{0,9}/,
+  price: /\d[\d,]*\.\d{1,4}/,
+  change_percentage: /[-+−(]?\s*\d+(?:[.,]\d+)?\s*%/,
+  volume: /\d[\d,.]{3,}\s*[KkMmBbTt]?/,
+};
+
+/**
+ * Does this fragment appear to contain the metric at all?
+ *
+ * Used to sanity-check a model that answers "the metric is not in there". That
+ * answer is normally worth trusting and is treated as final — asking again
+ * cannot conjure a value that is absent. But it is a claim, and when the
+ * fragment plainly holds a value of the right shape the claim is wrong, and
+ * giving up on the strength of it loses a repair that was available.
+ *
+ * Returns the first matching sample so the caller can quote it back.
+ */
+export function fragmentMentions(field, html) {
+  const hint = FRAGMENT_HINTS[field];
+  if (!hint || !html) return null;
+  const text = String(html).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!text) return null;
+  const match = text.match(hint);
+  return match ? match[0].trim() : null;
+}
+
 /**
  * Sanity check that a scraped string is the *kind* of value the field expects.
  *

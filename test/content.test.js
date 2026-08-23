@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { makePage, loadContentScript } from './helpers.mjs';
 import { candidatesFor } from '../src/lib/selectors.js';
 import { FIELDS, SNIPPET_LIMIT } from '../src/lib/constants.js';
-import { HEALTHY_PAGE, BROKEN_PAGE, EMPTY_PAGE, INDEX_RAIL_PAGE } from './fixtures/pages.mjs';
+import { HEALTHY_PAGE, BROKEN_PAGE, EMPTY_PAGE, INDEX_RAIL_PAGE, TICKER_CHIP_PAGE } from './fixtures/pages.mjs';
 
 function candidateMap(host, registry = {}) {
   const map = {};
@@ -177,5 +177,34 @@ test('a page with no volume at all offers no container to repair', async () => {
     });
     assert.equal(result.ok, false);
     assert.match(result.error, /no container/);
+  });
+});
+
+test('the container is anchored on the heading, not on a stray ticker chip', async () => {
+  // Seen live on stockanalysis.com: the shortest element containing "AAPL" was
+  // a bare chip inside an ad slot, so the repair loop kept sending the model a
+  // 300x250 advert and the model kept — correctly — saying the metric was not
+  // in it. A heading is what names the instrument; a chip is just a mention.
+  await withPage(TICKER_CHIP_PAGE, 'https://stockanalysis.com/stocks/aapl/', async (page) => {
+    const api = page.window.__selfHealingMarketScraper__;
+    const snippet = api.snippetFor('change_percentage', SNIPPET_LIMIT, 'AAPL');
+    assert.match(snippet, /\+1\.80%/, 'the quote change must be in the fragment');
+
+    // What the model is actually handed: the captured container, sanitized.
+    // Anchoring on the chip used to make the ad slot the *whole* fragment.
+    const { JSDOM } = await import('jsdom');
+    const { sanitizeSnippet } = await import('../src/lib/sanitize.js');
+    const body = new JSDOM(`<body>${snippet}</body>`).window.document.body;
+    const cleaned = sanitizeSnippet(body, { maxChars: SNIPPET_LIMIT });
+
+    assert.match(cleaned.html, /\+1\.80%/, 'the value the model needs survives sanitizing');
+    assert.doesNotMatch(cleaned.html, /\+99\.90%/, 'the advert does not');
+  });
+});
+
+test('with no anchor text the heading is still what the container follows', async () => {
+  await withPage(TICKER_CHIP_PAGE, 'https://stockanalysis.com/stocks/aapl/', async (page) => {
+    const snippet = page.window.__selfHealingMarketScraper__.snippetFor('change_percentage', SNIPPET_LIMIT, null);
+    assert.match(snippet, /\+1\.80%/);
   });
 });

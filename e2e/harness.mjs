@@ -81,11 +81,18 @@ export function stageExtension(hosts) {
 
 export const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-function launchOne(executablePath, extensionDir, userDataDir) {
+/**
+ * `protocolTimeout` bounds a single CDP call, and one of those calls is "run
+ * the scrape and tell me what you got". A scrape through Bright Data's remote
+ * browser is a network round trip to a proxy exit node, and 90 seconds is not
+ * unusual for it — so the runs that do that pass a longer bound rather than
+ * failing on a step that was still working.
+ */
+function launchOne(executablePath, extensionDir, userDataDir, protocolTimeout = 60000) {
   return puppeteer.launch({
     executablePath,
     headless: false, // extensions do not load in the old headless mode
-    protocolTimeout: 60000,
+    protocolTimeout,
     userDataDir,
     args: [
       `--disable-extensions-except=${extensionDir}`,
@@ -112,7 +119,7 @@ function launchOne(executablePath, extensionDir, userDataDir) {
  * worker to appear and moves on to the next installed browser if it does not,
  * so the suite keeps running on Edge or Chromium instead of failing obscurely.
  */
-export async function launch(extensionDir, profileName) {
+export async function launch(extensionDir, profileName, { protocolTimeout } = {}) {
   const candidates = browserCandidates();
   if (!candidates.length) throw new Error('No Chrome/Chromium/Edge binary found. Set BROWSER_PATH to one.');
 
@@ -120,7 +127,7 @@ export async function launch(extensionDir, profileName) {
   for (const [index, executablePath] of candidates.entries()) {
     const userDataDir = path.join(os.tmpdir(), `${profileName}-${process.pid}-${index}`);
     rmSync(userDataDir, { recursive: true, force: true });
-    const browser = await launchOne(executablePath, extensionDir, userDataDir);
+    const browser = await launchOne(executablePath, extensionDir, userDataDir, protocolTimeout);
     try {
       await browser.waitForTarget(
         (t) => t.type() === 'service_worker' && t.url().includes('background.js'),
