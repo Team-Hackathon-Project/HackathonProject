@@ -7,6 +7,11 @@ markup, and proposes **BUY / SELL / HOLD** with an explicit rationale.
 It never places an order. Every recommendation ends at a confirmation modal
 where you approve, reject, or override — and the decision is recorded locally.
 
+**New here?** [docs/USER-GUIDE.md](docs/USER-GUIDE.md) is the step-by-step
+version of everything below — install, setup, and each feature in turn, with no
+prior knowledge assumed. [docs/DEMO.md](docs/DEMO.md) is the three-minute demo
+script. This README is the design reasoning.
+
 ## Install (unpacked)
 
 ```bash
@@ -347,6 +352,42 @@ readable that way, and `only` mode never opens a tab at all.
 The panel has no field for the Bright Data password, and never will: it belongs
 in the agent's `.env`, on the machine that dials the endpoint.
 
+## Bright Data Scraper Studio
+
+The Scraping Browser above is a remote Chrome that *our* code drives. Scraper
+Studio is the other half of the same company's offering and the opposite
+arrangement: the scraper is a **collector** authored and published in Bright
+Data's own IDE, running on their infrastructure, and this project queues inputs
+and collects the output.
+
+| | Scraping Browser | Scraper Studio |
+| --- | --- | --- |
+| Who wrote the scraper | us, in `src/content.js` | you, in their IDE |
+| Where it runs | your machine drives a remote Chrome | their infrastructure |
+| How data comes back | we parse the DOM ourselves | an HTTP endpoint returns a dataset |
+| What it costs | remote browser minutes | collector page loads |
+
+```bash
+npm run studio:check         # credentials only
+npm run studio -- AAPL MSFT  # queue inputs, wait, print the snapshots
+```
+
+Rows come back mapped onto the same snapshot shape a tab scan produces, so a
+Studio result and a browser scrape are interchangeable downstream — same
+advisory, same storage, same popup. The bridge exposes it at `POST /studio`, and
+`GET /health` reports whether it is configured.
+
+Telling "finished" from "still building" is the fiddly part, and the obvious
+rule is wrong: Bright Data's own boilerplate treats an array as the finished
+signal, but a collector that produced exactly one row answers with a bare
+object, which that rule reads as "still building" until the poll loop gives up
+on a job that finished in seconds. So a body counts as progress only when it
+says so. Arrays, single objects and newline-delimited JSON are all read.
+
+Setup — creating the collector, which happens inside a Bright Data account and
+cannot be done from this repository — is in
+[docs/SCRAPER-STUDIO.md](docs/SCRAPER-STUDIO.md).
+
 ## Advisory & human-in-the-loop
 
 `adviseOn()` sends the normalized snapshot plus your own position and targets to
@@ -482,7 +523,7 @@ Advisory output:
 ## Commands
 
 ```bash
-npm run check     # static validation + the full test suite (428 tests)
+npm run check     # static validation + the full test suite (476 tests)
 npm run web       # serve the dashboard at http://localhost:8080
 npm run web:sync  # refresh web/vendor/ from src/ (the lint fails if it drifts)
 npm run package   # dist/self-healing-market-scraper-<version>.zip
@@ -498,6 +539,11 @@ npm run brightdata:check    # do the Scraping Browser credentials work?
 npm run brightdata -- AAPL  # one scrape at a terminal, repairing what is broken
 npm run brightdata -- --registry     # what has been healed so far
 npm run agent               # the loopback bridge the extension calls
+npm run e2e:brightdata      # the whole path, driven from the extension
+
+# Bright Data Scraper Studio — a collector that runs on their infrastructure
+npm run studio:check        # credentials only; queues no job, spends nothing
+npm run studio -- AAPL MSFT # a real collector run
 npm run e2e:brightdata      # the whole Bright Data path, against the real service
 ```
 
