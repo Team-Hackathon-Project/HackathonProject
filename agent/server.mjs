@@ -9,6 +9,7 @@
  *
  *   GET  /health     configuration and readiness, with nothing secret in it
  *   POST /scrape     { url?, ticker?, registry?, selfHeal? } -> one scrape
+ *   POST /studio     { tickers?, urls? } -> a Scraper Studio collector run
  *   GET  /registry   every healed selector the agent knows
  *   POST /registry   merge the extension's healed selectors into the agent's
  *
@@ -23,6 +24,7 @@
 import http from 'node:http';
 import { loadAgentConfig, loadAgentEnv } from './config.mjs';
 import { scrapeThroughBrightData } from './scrape.mjs';
+import { scrapeThroughStudio } from './studio.mjs';
 import { getRegistry, mergeRegistry, getHealLog } from './registry.mjs';
 import { BRIDGE_PROTOCOL } from '../src/lib/brightdata.js';
 
@@ -115,6 +117,7 @@ export function createBridge(config = loadAgentConfig()) {
       tokenRequired: Boolean(config.bridge.token),
       brightdata: config.summary.brightdata,
       llm: config.summary.llm,
+      studio: config.summary.studio,
       selfHealing: {
         available: Boolean(config.llm.apiKey),
         reason: config.llm.apiKey ? null : 'no model API key in .env — scrapes will run without repair',
@@ -129,6 +132,30 @@ export function createBridge(config = loadAgentConfig()) {
       if (merged) log(`merged ${merged} healed selector(s) from the extension`);
       return { ok: true, merged, registry };
     },
+
+    // Scraper Studio: the collector is authored and published in Bright Data's
+    // own IDE and runs on their infrastructure. This route only queues inputs
+    // and hands back what the collector produced, in our snapshot shape.
+    'POST /studio': async (body) => queue(async () => {
+      const tickers = Array.isArray(body.tickers) ? body.tickers : (body.ticker ? [body.ticker] : []);
+      const urls = Array.isArray(body.urls) ? body.urls : (body.url ? [body.url] : []);
+      const label = tickers.join(',') || urls.join(',') || '(nothing)';
+      log(`studio ${label}`);
+      try {
+        const result = await scrapeThroughStudio({
+          tickers,
+          urls,
+          config,
+          onProgress: (event) => log(`  ${event.phase}${event.status ? ` (${event.status})` : ''}`),
+        });
+        log(`  ${result.ok ? 'ok' : 'no usable rows'} ${label} — ${result.snapshots.length} snapshot(s) in ${result.duration_ms}ms`);
+        return result;
+      } catch (error) {
+        const message = String((error && error.message) || error);
+        log(`  error ${label}: ${message}`);
+        return { ok: false, method: 'scraper-studio', error: message };
+      }
+    }),
 
     'POST /scrape': async (body) => queue(async () => {
       const label = body.ticker || body.url || '(unnamed)';

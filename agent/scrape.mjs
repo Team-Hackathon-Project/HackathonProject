@@ -21,13 +21,9 @@ import { isUsableSnapshot } from '../src/lib/normalize.js';
  * shipped selector registry — the same default `src/background.js` uses, so a
  * ticker added in the dashboard and a ticker scraped here land on one page.
  */
-export function defaultQuoteUrl(ticker) {
-  return `https://stockanalysis.com/stocks/${encodeURIComponent(String(ticker).toLowerCase())}/`;
-}
-
-export function normalizeTicker(value) {
-  return String(value || '').trim().toUpperCase() || null;
-}
+// Defined in a leaf module so the Scraper Studio client can share them without
+// importing this file, which would close an import cycle back through config.
+export { defaultQuoteUrl, normalizeTicker } from './tickers.mjs';
 
 /**
  * Scrapes one quote page through Bright Data.

@@ -9,6 +9,7 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadEnv, credentialsFromEnv, describeKey } from '../e2e/env.mjs';
+import { studioFromEnv, describeToken } from './studio.mjs';
 import {
   parseEndpoint, buildEndpoint, describeEndpoint, redactEndpoint, withGeo, geoOf, GEO_PARAMS, DEFAULT_BRIDGE_URL,
 } from '../src/lib/brightdata.js';
@@ -120,12 +121,16 @@ export function loadAgentConfig(env = loadAgentEnv()) {
   const bridge = bridgeFromEnv(env);
   const tuning = tuningFromEnv(env);
   const llm = llmFromEnv(env);
+  const studio = studioFromEnv(env);
   return {
+    // `ok` still tracks the Scraping Browser: it is what /scrape needs. Scraper
+    // Studio is a separate capability with its own readiness.
     ok: endpoint.ok === true,
     endpoint,
     bridge,
     tuning,
     llm,
+    studio,
     summary: {
       brightdata: endpoint.ok
         ? {
@@ -140,6 +145,9 @@ export function loadAgentConfig(env = loadAgentEnv()) {
         : { configured: false, source: endpoint.source, error: endpoint.error },
       bridge: { url: bridge.url, tokenRequired: Boolean(bridge.token) },
       llm: { provider: llm.provider, model: llm.model || '(provider default)', key: describeKey(llm.apiKey) },
+      studio: studio.ok
+        ? { configured: true, collector: studio.collectorId, token: describeToken(studio.apiToken) }
+        : { configured: false, error: studio.error },
     },
   };
 }
